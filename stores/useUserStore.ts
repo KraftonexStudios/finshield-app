@@ -92,6 +92,13 @@ export interface AuthState {
   loginWithPin: (pin: string) => Promise<boolean>;
   loginWithBiometric: () => Promise<boolean>;
   checkAuthenticationStatus: () => Promise<boolean>;
+  checkLocalStorageAuth: () => Promise<boolean>;
+  storeUserCredentials: (
+    userId: string,
+    pin: string,
+    biometricEnabled: boolean
+  ) => Promise<void>;
+  clearStoredCredentials: () => Promise<void>;
 
   // Actions
   initializeStore: () => Promise<void>;
@@ -309,47 +316,54 @@ export const useUserStore = create<AuthState>()(
       verifyOTP: async (otp: string) => {
         set({ isLoading: true, error: null });
         try {
-          const { verificationId } = get();
+          const { verificationId, mobileNumber } = get();
           if (!verificationId) {
             throw new Error("No verification ID found");
           }
-
           const user = await firebaseService.verifyOTP(verificationId, otp);
+
+          // Add +91 prefix if not present
+          const formattedMobile = mobileNumber.startsWith("+91")
+            ? mobileNumber
+            : `+91${mobileNumber}`;
+
+          // Fetch user data from backend/DB by mobile number
+          const userData = await firebaseService.getUserData(formattedMobile);
+          if (!userData) {
+            throw new Error("User data not found");
+          }
 
           // Set the user in the store after successful verification
           set({
-            user,
-            isAuthenticated: false, // Keep false until PIN is verified for existing users
+            user: userData,
+            isAuthenticated: false, // Keep false until PIN is verified
           });
 
-          // Check if user has completed setup (has PIN and security questions)
-          const hasPinSetup = !!user.pinHash;
+          // Check if user is new or existing
+          const hasPinSetup = !!userData.pinHash;
           const hasSecurityQuestions =
-            user.recoveryQuestions && user.recoveryQuestions.length > 0;
-          const hasBiometricSetup = user.biometricEnabled;
+            userData.recoveryQuestions && userData.recoveryQuestions.length > 0;
+          const hasBiometricSetup = userData.biometricEnabled;
 
-          // If user has completed all setup, redirect to PIN authentication
-          if (hasPinSetup && hasSecurityQuestions) {
-            set({
-              onboardingStep: "completed",
-              onboardingComplete: true,
-            });
-            // User will be redirected to PIN auth screen
-            return;
-          }
-
-          // Otherwise, continue with onboarding flow
           if (!hasPinSetup) {
+            // New user - proceed with setting up PIN, Biometric, Questions
             set({ onboardingStep: "pin-setup" });
-          } else if (!hasSecurityQuestions) {
-            set({ onboardingStep: "security-questions" });
-          } else if (!hasBiometricSetup) {
-            set({ onboardingStep: "biometric-setup" });
-          } else {
+          } else if (hasPinSetup && hasSecurityQuestions) {
+            // Existing user reregistering - redirect to PIN auth for login
             set({
               onboardingStep: "completed",
               onboardingComplete: true,
             });
+            // Use router to navigate to login PIN screen
+            setTimeout(() => {
+              require("expo-router").router.replace("/(auth)/login-pin");
+            }, 100);
+          } else if (hasPinSetup && !hasSecurityQuestions) {
+            // User has PIN but no security questions
+            set({ onboardingStep: "security-questions" });
+          } else {
+            // Fallback to biometric setup
+            set({ onboardingStep: "biometric-setup" });
           }
         } catch (error) {
           console.error("Error verifying OTP:", error);
@@ -369,6 +383,13 @@ export const useUserStore = create<AuthState>()(
           }
 
           await firebaseService.setupPin(user.uid, pin);
+
+          // Store credentials locally after successful PIN setup
+          await get().storeUserCredentials(
+            user.uid,
+            pin,
+            user.biometricEnabled || false
+          );
 
           // Check if security questions are needed
           const needsSecurityQuestions =
@@ -420,6 +441,13 @@ export const useUserStore = create<AuthState>()(
           }
 
           await firebaseService.setupBiometric(user.uid, type);
+
+          // Update stored credentials with biometric enabled
+          const storedPin = await secureStorage.getItem("userPin");
+          if (storedPin) {
+            await get().storeUserCredentials(user.uid, storedPin, true);
+          }
+
           set({
             biometricType: type,
             onboardingStep: "completed",
@@ -473,6 +501,9 @@ export const useUserStore = create<AuthState>()(
           // Clear all subscriptions
           get().unsubscribeAll();
 
+          // Clear stored credentials
+          await get().clearStoredCredentials();
+
           // Clear user session and reset state
           set({
             isAuthenticated: false,
@@ -525,7 +556,7 @@ export const useUserStore = create<AuthState>()(
 
           // Refresh user data to get updated balance
           await get().refreshUserData();
-          
+
           // Real-time updates will be handled by subscriptions
           return result;
         } catch (error) {
@@ -623,8 +654,16 @@ export const useUserStore = create<AuthState>()(
             return false;
           }
 
+          // Validate PIN with Firebase first
           const isValidPin = await firebaseService.validatePin(user.uid, pin);
           if (isValidPin) {
+            // Store credentials locally for future quick login
+            await get().storeUserCredentials(
+              user.uid,
+              pin,
+              user.biometricEnabled || false
+            );
+
             // Update last login timestamp
             await firebaseService.updateLastLogin(user.uid);
             set({
@@ -760,11 +799,11 @@ export const useUserStore = create<AuthState>()(
 
           const updatedUser = await firebaseService.getUserData(user.mobile);
           if (updatedUser) {
-            set({ 
-              user: { 
-                ...user, 
-                balance: updatedUser.balance 
-              } 
+            set({
+              user: {
+                ...user,
+                balance: updatedUser.balance,
+              },
             });
           }
         } catch (error) {
@@ -800,6 +839,64 @@ export const useUserStore = create<AuthState>()(
         } catch (error) {
           console.error("Error finding user by mobile:", error);
           return null;
+        }
+      },
+
+      // Check if user has stored credentials in local storage
+      checkLocalStorageAuth: async (): Promise<boolean> => {
+        try {
+          const storedUserId = await secureStorage.getItem("userId");
+          const storedPin = await secureStorage.getItem("userPin");
+          const biometricEnabled =
+            await secureStorage.getItem("biometricEnabled");
+
+          if (storedUserId && storedPin) {
+            // Load user data from Firebase using stored userId
+            const userData = await firebaseService.getUserById(storedUserId);
+            if (userData) {
+              set({
+                user: userData,
+                isAuthenticated: false, // Not authenticated until PIN/biometric verification
+                onboardingComplete: true,
+                onboardingStep: "completed",
+              });
+              return true;
+            }
+          }
+          return false;
+        } catch (error) {
+          console.error("Error checking local storage auth:", error);
+          return false;
+        }
+      },
+
+      // Store user credentials securely after successful setup
+      storeUserCredentials: async (
+        userId: string,
+        pin: string,
+        biometricEnabled: boolean
+      ): Promise<void> => {
+        try {
+          await secureStorage.setItem("userId", userId);
+          await secureStorage.setItem("userPin", pin);
+          await secureStorage.setItem(
+            "biometricEnabled",
+            biometricEnabled.toString()
+          );
+        } catch (error) {
+          console.error("Error storing user credentials:", error);
+          throw error;
+        }
+      },
+
+      // Clear stored credentials (logout)
+      clearStoredCredentials: async (): Promise<void> => {
+        try {
+          await secureStorage.removeItem("userId");
+          await secureStorage.removeItem("userPin");
+          await secureStorage.removeItem("biometricEnabled");
+        } catch (error) {
+          console.error("Error clearing stored credentials:", error);
         }
       },
 

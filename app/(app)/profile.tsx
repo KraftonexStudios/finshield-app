@@ -20,7 +20,7 @@ export default function ProfileScreen() {
         title: 'My Payment Details'
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      // Error sharing
     }
   }, [user?.fullName, user?.mobile]);
 

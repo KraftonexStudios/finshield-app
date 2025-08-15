@@ -1,8 +1,10 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
+import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 interface BillProvider {
   id: string;
@@ -27,6 +29,22 @@ export default function BillPaymentScreen() {
   const [customerName, setCustomerName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useUserStore();
+  const { startDataCollection, isCollecting, collectionScenario } = useDataCollectionStore();
+
+  // Start data collection when screen loads
+  useEffect(() => {
+    const initializeDataCollection = async () => {
+      if (!isCollecting && !collectionScenario) {
+        try {
+          await startDataCollection('login');
+        } catch (error) {
+          // Failed to start data collection
+        }
+      }
+    };
+
+    initializeDataCollection();
+  }, [isCollecting, collectionScenario, startDataCollection]);
 
   const billCategories: BillCategory[] = [
     {
@@ -124,8 +142,10 @@ export default function BillPaymentScreen() {
       // Simulate API call to fetch bill details
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Mock bill details
-      const mockAmount = Math.floor(Math.random() * 5000) + 500;
+      // Mock bill details - In production, this would come from actual API
+      // Using a deterministic amount based on bill number for consistency
+      const billHash = billNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const mockAmount = (billHash % 4500) + 500; // Range: 500-4999
       const mockCustomerName = 'John Doe';
 
       setAmount(mockAmount.toString());
@@ -262,13 +282,14 @@ export default function BillPaymentScreen() {
                 {/* Bill Number Input */}
                 <View className="bg-white/5 rounded-2xl p-6 mb-4 border border-white/10">
                   <Text className="text-white/70 text-sm mb-3">Bill Number / Consumer ID</Text>
-                  <TextInput
+                  <DataCollectionTextInput
                     value={billNumber}
                     onChangeText={setBillNumber}
                     placeholder="Enter your bill number"
                     placeholderTextColor="rgba(255,255,255,0.3)"
                     className="text-white text-lg bg-white/5 rounded-xl px-4 py-3 border border-white/10"
                     maxLength={20}
+                    inputType="text"
                   />
 
                   <Pressable
@@ -298,7 +319,7 @@ export default function BillPaymentScreen() {
                   <Text className="text-white/70 text-sm mb-3">Bill Amount</Text>
                   <View className="flex-row items-center">
                     <Text className="text-white text-xl mr-2">₹</Text>
-                    <TextInput
+                    <DataCollectionTextInput
                       value={amount}
                       onChangeText={setAmount}
                       placeholder="0"
@@ -307,6 +328,7 @@ export default function BillPaymentScreen() {
                       keyboardType="numeric"
                       maxLength={8}
                       editable={!customerName} // Disable if fetched from API
+                      inputType="amount"
                     />
                   </View>
                 </View>

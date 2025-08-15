@@ -1,8 +1,9 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 interface SecurityQuestion {
   id: string;
@@ -168,7 +169,7 @@ export default function SecurityQuestionsScreen() {
                     )}
 
                     {/* Answer Input */}
-                    <TextInput
+                    <DataCollectionTextInput
                       value={item.answer}
                       onChangeText={(text) => handleAnswerChange(item.id, text)}
                       placeholder="Enter your answer"
@@ -176,6 +177,7 @@ export default function SecurityQuestionsScreen() {
                       className="bg-white/5 border border-white/20 rounded-2xl px-5 py-4 text-white text-base"
                       autoCapitalize="words"
                       autoCorrect={false}
+                      inputType="text"
                     />
                   </View>
                 ))}

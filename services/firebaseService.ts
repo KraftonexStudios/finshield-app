@@ -8,7 +8,6 @@ import {
   getFirestore,
   increment,
   limit,
-  orderBy,
   query,
   runTransaction,
   serverTimestamp,
@@ -158,6 +157,24 @@ class FirebaseService {
       return { ...userData, uid: userDoc.id };
     } catch (error) {
       console.error("Error getting user data:", error);
+      return null;
+    }
+  }
+
+  // Get user data by user ID
+  async getUserById(userId: string): Promise<FirebaseUser | null> {
+    try {
+      const userDocRef = doc(db, "users", userId);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        return null;
+      }
+
+      const userData = userDoc.data() as FirebaseUser;
+      return { ...userData, uid: userDoc.id };
+    } catch (error) {
+      console.error("Error getting user by ID:", error);
       return null;
     }
   }
@@ -489,7 +506,8 @@ class FirebaseService {
       const fromUserRef = doc(db, "users", fromUserId);
 
       // Remove undefined values from transaction data
-      const cleanedTransactionData = this.removeUndefinedValues(transactionData);
+      const cleanedTransactionData =
+        this.removeUndefinedValues(transactionData);
 
       const transaction: FirebaseTransaction = {
         ...cleanedTransactionData,
@@ -503,16 +521,16 @@ class FirebaseService {
       // Run Firestore transaction to ensure data consistency
       await runTransaction(db, async (firestoreTransaction) => {
         // IMPORTANT: All reads must happen before all writes in Firestore transactions
-        
+
         // Read all required documents first
         const fromUserDoc = await firestoreTransaction.get(fromUserRef);
-        
+
         if (!fromUserDoc.exists()) {
           throw new Error("Sender not found");
         }
 
         const fromUserData = fromUserDoc.data() as FirebaseUser;
-        
+
         // Read toUser document if this is a transfer
         let toUserDoc = null;
         let toUserRef = null;
@@ -522,9 +540,9 @@ class FirebaseService {
           toUserDoc = await firestoreTransaction.get(toUserRef);
           recipientExists = toUserDoc.exists();
         }
-        
+
         // Now perform all writes after reads are complete
-        
+
         // Check sufficient balance for debit transactions
         if (transaction.type === "debit" || transaction.type === "transfer") {
           if (fromUserData.balance < transaction.amount) {
@@ -539,7 +557,12 @@ class FirebaseService {
         }
 
         // Handle transfer to another user (only if recipient exists)
-        if (transaction.type === "transfer" && transaction.toUserId && recipientExists && toUserRef) {
+        if (
+          transaction.type === "transfer" &&
+          transaction.toUserId &&
+          recipientExists &&
+          toUserRef
+        ) {
           // Credit amount to receiver
           firestoreTransaction.update(toUserRef, {
             balance: increment(transaction.amount),
@@ -558,7 +581,9 @@ class FirebaseService {
         // Update transaction status based on recipient existence
         if (transaction.type === "transfer" && !recipientExists) {
           transaction.status = "failed";
-          transaction.note = transaction.note ? `${transaction.note} (Recipient not found)` : "Recipient not found";
+          transaction.note = transaction.note
+            ? `${transaction.note} (Recipient not found)`
+            : "Recipient not found";
         } else {
           transaction.status = "completed";
         }
@@ -566,12 +591,16 @@ class FirebaseService {
         // Create sender transaction record
         const senderTransaction = this.removeUndefinedValues({
           ...transaction,
-          id: transactionRef.id
+          id: transactionRef.id,
         });
         firestoreTransaction.set(transactionRef, senderTransaction);
 
         // Create recipient transaction record if recipient exists and it's a transfer
-        if (transaction.type === "transfer" && recipientExists && transaction.toUserId) {
+        if (
+          transaction.type === "transfer" &&
+          recipientExists &&
+          transaction.toUserId
+        ) {
           const recipientTransactionRef = doc(collection(db, "transactions"));
           const recipientTransaction = this.removeUndefinedValues({
             ...transaction,
@@ -579,10 +608,13 @@ class FirebaseService {
             fromUserId: transaction.toUserId, // Set recipient as the "owner" of this transaction record
             toUserId: fromUserId, // Original sender becomes the "to" user
             type: "credit" as const, // This is a credit for the recipient
-            description: `Received from ${transaction.fromMobile || 'sender'}`,
-            status: "completed"
+            description: `Received from ${transaction.fromMobile || "sender"}`,
+            status: "completed",
           });
-          firestoreTransaction.set(recipientTransactionRef, recipientTransaction);
+          firestoreTransaction.set(
+            recipientTransactionRef,
+            recipientTransaction
+          );
         }
       });
 

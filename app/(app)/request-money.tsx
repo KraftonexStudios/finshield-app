@@ -1,8 +1,10 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
+import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, SafeAreaView, ScrollView, Share, Text, View } from 'react-native';
 
 export default function RequestMoneyScreen() {
   const [amount, setAmount] = useState('');
@@ -11,6 +13,22 @@ export default function RequestMoneyScreen() {
   const [selectedContact, setSelectedContact] = useState<any>(null);
   const [recentContacts, setRecentContacts] = useState<any[]>([]);
   const { user, transactions } = useUserStore();
+  const { startDataCollection, isCollecting, collectionScenario } = useDataCollectionStore();
+
+  // Start data collection when screen loads
+  useEffect(() => {
+    const initializeDataCollection = async () => {
+      if (!isCollecting && !collectionScenario) {
+        try {
+          await startDataCollection('login');
+        } catch (error) {
+          // Failed to start data collection
+        }
+      }
+    };
+
+    initializeDataCollection();
+  }, [isCollecting, collectionScenario, startDataCollection]);
 
   const quickAmounts = [500, 1000, 2000, 5000];
 
@@ -24,9 +42,9 @@ export default function RequestMoneyScreen() {
           if (!existing && tx.toMobile !== user?.mobile) {
             acc.push({
               id: tx.toUserId || tx.toMobile,
-              name: tx.toName || 'Unknown',
+              name: tx.fromMobile || 'Unknown',
               mobile: tx.toMobile,
-              avatar: (tx.toName || 'UN').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+              avatar: (tx.fromMobile || 'UN').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
             });
           }
           return acc;
@@ -79,7 +97,7 @@ export default function RequestMoneyScreen() {
     const recipientName = selectedContact?.name || 'Unknown';
 
     try {
-      const message = `💰 Payment Request\n\nHi ${recipientName}!\n\n${user?.name || 'Someone'} has requested ${formatCurrency(amount)} from you.\n\n${note ? `Note: ${note}\n\n` : ''}Pay securely using this link:\n${paymentLink}\n\nRequest ID: ${requestId}\n\nSent via SecureBank App`;
+      const message = `💰 Payment Request\n\nHi ${recipientName}!\n\n${user?.fullName || 'Someone'} has requested ${formatCurrency(amount)} from you.\n\n${note ? `Note: ${note}\n\n` : ''}Pay securely using this link:\n${paymentLink}\n\nRequest ID: ${requestId}\n\nSent via SecureBank App`;
 
       await Share.share({
         message,
@@ -143,7 +161,7 @@ export default function RequestMoneyScreen() {
               <Text className="text-white/70 text-sm mb-2">Enter Amount</Text>
               <View className="flex-row items-center">
                 <Text className="text-white text-2xl mr-2">₹</Text>
-                <TextInput
+                <DataCollectionTextInput
                   value={amount}
                   onChangeText={setAmount}
                   placeholder="0"
@@ -151,6 +169,7 @@ export default function RequestMoneyScreen() {
                   className="text-white text-3xl font-bold flex-1"
                   keyboardType="numeric"
                   maxLength={8}
+                  inputType="amount"
                 />
               </View>
 
@@ -176,7 +195,7 @@ export default function RequestMoneyScreen() {
             {/* Mobile Number Input */}
             <View className="bg-white/5 rounded-2xl p-6 mb-6 border border-white/10">
               <Text className="text-white/70 text-sm mb-3">Request From</Text>
-              <TextInput
+              <DataCollectionTextInput
                 value={mobileNumber}
                 onChangeText={setMobileNumber}
                 placeholder="Enter mobile number"
@@ -184,6 +203,7 @@ export default function RequestMoneyScreen() {
                 className="text-white text-lg bg-white/5 rounded-xl px-4 py-3 border border-white/10"
                 keyboardType="phone-pad"
                 maxLength={15}
+                inputType="mobile"
               />
             </View>
 
@@ -197,8 +217,8 @@ export default function RequestMoneyScreen() {
                       key={contact.id}
                       onPress={() => handleContactSelect(contact)}
                       className={`items-center p-3 rounded-2xl border ${selectedContact?.id === contact.id
-                          ? 'bg-purple-500/20 border-purple-500'
-                          : 'bg-white/5 border-white/10'
+                        ? 'bg-purple-500/20 border-purple-500'
+                        : 'bg-white/5 border-white/10'
                         }`}
                       style={({ pressed }) => ({
                         opacity: pressed ? 0.7 : 1,
@@ -219,7 +239,7 @@ export default function RequestMoneyScreen() {
             {/* Note Input */}
             <View className="bg-white/5 rounded-2xl p-6 mb-6 border border-white/10">
               <Text className="text-white/70 text-sm mb-3">Add Note (Optional)</Text>
-              <TextInput
+              <DataCollectionTextInput
                 value={note}
                 onChangeText={setNote}
                 placeholder="What's this request for?"
@@ -229,6 +249,7 @@ export default function RequestMoneyScreen() {
                 numberOfLines={3}
                 maxLength={100}
                 textAlignVertical="top"
+                inputType="text"
               />
               <Text className="text-white/40 text-xs mt-2 text-right">
                 {note.length}/100

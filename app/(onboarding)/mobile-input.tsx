@@ -2,7 +2,8 @@ import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, View } from 'react-native';
+import { TextInputWrapper } from '@/components/TextInputWrapper';
 
 export default function MobileInputScreen() {
   const { setMobileNumber, checkUserExists, isLoading, error, userExists, setError } = useUserStore();
@@ -102,7 +103,7 @@ export default function MobileInputScreen() {
 
               <View className="flex-row items-center bg-white/5 border border-white/20 rounded-2xl px-5 py-4">
                 <Text className="text-white text-lg mr-3">🇮🇳 +91</Text>
-                <TextInput
+                <TextInputWrapper
                   value={formatMobileNumber(mobile)}
                   onChangeText={handleMobileChange}
                   placeholder="Enter your mobile number"
@@ -111,6 +112,7 @@ export default function MobileInputScreen() {
                   maxLength={13} // Formatted length: XXX XXX XXXX
                   className="flex-1 text-lg text-white"
                   autoFocus
+                  inputType="amount"
                 />
               </View>
 

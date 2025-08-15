@@ -1,8 +1,9 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 interface Beneficiary {
   id: string;
@@ -42,9 +43,11 @@ export default function BeneficiaryListScreen() {
       `Edit ${beneficiary.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Edit', onPress: () => {
-          Alert.alert('Coming Soon', 'Edit beneficiary feature will be available soon.');
-        }}
+        {
+          text: 'Edit', onPress: () => {
+            Alert.alert('Coming Soon', 'Edit beneficiary feature will be available soon.');
+          }
+        }
       ]
     );
   };
@@ -55,9 +58,11 @@ export default function BeneficiaryListScreen() {
       `Are you sure you want to remove ${beneficiary.name} from your beneficiaries?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          setBeneficiaries(prev => prev.filter(b => b.id !== beneficiary.id));
-        }}
+        {
+          text: 'Delete', style: 'destructive', onPress: () => {
+            setBeneficiaries(prev => prev.filter(b => b.id !== beneficiary.id));
+          }
+        }
       ]
     );
   };
@@ -99,7 +104,7 @@ export default function BeneficiaryListScreen() {
           </Text>
         </View>
       </View>
-      
+
       <View className="flex-row justify-between">
         <Pressable
           onPress={() => handleSendMoney(beneficiary)}
@@ -107,14 +112,14 @@ export default function BeneficiaryListScreen() {
         >
           <Text className="text-white font-medium text-center">Send Money</Text>
         </Pressable>
-        
+
         <Pressable
           onPress={() => handleEditBeneficiary(beneficiary)}
           className="bg-white/20 rounded-xl px-4 py-2 mr-2"
         >
           <Text className="text-white font-medium">Edit</Text>
         </Pressable>
-        
+
         <Pressable
           onPress={() => handleDeleteBeneficiary(beneficiary)}
           className="bg-red-500/20 rounded-xl px-4 py-2"
@@ -151,12 +156,13 @@ export default function BeneficiaryListScreen() {
 
           {/* Search Bar */}
           <View className="bg-white/10 rounded-2xl px-4 py-3 mb-6 border border-white/20">
-            <TextInput
+            <DataCollectionTextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search beneficiaries..."
               placeholderTextColor="rgba(255,255,255,0.5)"
               className="text-white text-base"
+              inputType="text"
             />
           </View>
 
@@ -173,7 +179,7 @@ export default function BeneficiaryListScreen() {
                   {searchQuery ? 'No matching beneficiaries' : 'No Beneficiaries Added'}
                 </Text>
                 <Text className="text-white/70 text-center mb-8 px-8">
-                  {searchQuery 
+                  {searchQuery
                     ? 'Try searching with a different name or mobile number'
                     : 'Add beneficiaries to send money quickly and easily. Beneficiaries are automatically added when you send money to new contacts.'
                   }

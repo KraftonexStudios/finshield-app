@@ -1,38 +1,56 @@
 import { useUserStore } from '@/stores/useUserStore';
+import { secureStorage } from '@/utils/secureStorage';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 
 export default function Index() {
-  const { isAuthenticated, onboardingComplete, initializeStore, checkAuthenticationStatus, user } = useUserStore();
+  const { isAuthenticated, initializeStore, checkLocalStorageAuth, user } = useUserStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
       await initializeStore();
-      // Check if user has a valid session
-      if (user) {
-        await checkAuthenticationStatus();
-      }
+
+      // Check if user has stored credentials for quick login
+      const hasStoredCredentials = await checkLocalStorageAuth();
+
       setIsInitialized(true);
     };
     initialize();
-  }, [initializeStore, checkAuthenticationStatus, user]);
+  }, [initializeStore, checkLocalStorageAuth]);
 
   useEffect(() => {
     if (!isInitialized) return;
 
-    // Redirect based on authentication and onboarding status
+    // New authentication flow logic
     if (isAuthenticated) {
-      // User is logged in, go to dashboard
+      // User is fully authenticated, go to dashboard
       router.replace('/(app)/dashboard');
-    } else if (onboardingComplete) {
-      // User has completed onboarding but not logged in, show welcome screen
-      router.replace('/(auth)/welcome');
     } else {
-      // New user, show onboarding
+      // Check if user has stored credentials (PIN/Biometric setup)
+      checkStoredCredentials();
+    }
+  }, [isAuthenticated, isInitialized]);
+
+  const checkStoredCredentials = async () => {
+    try {
+      const storedUserId = await secureStorage.getItem('userId');
+      const storedPin = await secureStorage.getItem('userPin');
+      const biometricEnabled = await secureStorage.getItem('biometricEnabled');
+
+      if (storedUserId && storedPin) {
+        // User has completed setup before, show login screen
+        router.replace('/(auth)/login-pin');
+      } else {
+        // New user or incomplete setup, start onboarding flow from get-started
+        router.replace('/(onboarding)/get-started');
+      }
+    } catch (error) {
+      // Error checking stored credentials
+      // Default to onboarding flow from get-started
       router.replace('/(onboarding)/get-started');
     }
-  }, [isAuthenticated, onboardingComplete, isInitialized]);
+  };
 
   return null; // This component just handles routing
 }

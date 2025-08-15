@@ -65,7 +65,7 @@ export default function BillSuccessScreen() {
         title: 'Bill Payment Receipt',
       });
     } catch (error) {
-      console.error('Error sharing receipt:', error);
+      // Error sharing receipt
     }
   };
 

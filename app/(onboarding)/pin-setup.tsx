@@ -1,3 +1,4 @@
+import { TextInputWrapper } from '@/components/TextInputWrapper';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -153,7 +154,7 @@ export default function PinSetupScreen() {
             {/* Hidden PIN Input */}
             <View className="flex-row justify-between opacity-0 absolute">
               {currentPin.map((digit, index) => (
-                <TextInput
+                <TextInputWrapper
                   key={`${step}-${index}`}
                   ref={(ref) => {
                     if (ref) inputRefs.current[index] = ref;
@@ -165,6 +166,7 @@ export default function PinSetupScreen() {
                   maxLength={1}
                   secureTextEntry
                   autoFocus={index === 0}
+                  inputType="password"
                 />
               ))}
             </View>

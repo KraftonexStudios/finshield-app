@@ -1,3 +1,4 @@
+import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -7,7 +8,8 @@ import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, View } from 'react-native';
 
 export default function OtpVerificationScreen() {
-  const { mobileNumber, verifyOTP, resendOTP, isLoading, error, onboardingStep } = useUserStore();
+  const { mobileNumber, verifyOTP, resendOTP, isLoading, error, onboardingStep, userExists } = useUserStore();
+  const { sendDataToServer, stopDataCollection, startDataCollection } = useDataCollectionStore();
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -21,7 +23,7 @@ export default function OtpVerificationScreen() {
   useEffect(() => {
     // Handle auto-detected OTP
     if (detectedOtp && detectedOtp.length === 6 && !isVerifying && !hasTriedVerification) {
-      console.log("Detected OTP:", detectedOtp);
+      // Detected OTP
       setIsVerifying(true);
       setHasTriedVerification(true);
       // Auto-verify the detected OTP
@@ -32,7 +34,7 @@ export default function OtpVerificationScreen() {
   useEffect(() => {
     // Handle timeout errors
     if (timeoutError) {
-      console.log("OTP listener timeout, restarting...");
+      // OTP listener timeout, restarting
       startListener();
     }
   }, [timeoutError]);
@@ -66,6 +68,17 @@ export default function OtpVerificationScreen() {
 
     try {
       await verifyOTP(otpCode);
+
+      // Handle data collection based on user type
+      if (userExists) {
+        // Re-registration scenario - continue collecting until PIN verification
+        await startDataCollection('re-registration');
+      } else {
+        // First-time registration - continue collecting until onboarding complete
+        // Data collection already started in permissions screen
+        // Continuing data collection for first-time registration
+      }
+
       // Navigation will be handled by the store based on user setup status
     } catch (error) {
       setIsVerifying(false);
@@ -75,17 +88,33 @@ export default function OtpVerificationScreen() {
 
   // Navigate based on onboarding step changes
   useEffect(() => {
-    if (onboardingStep === 'pin-setup') {
-      router.push('/(onboarding)/pin-setup');
-    } else if (onboardingStep === 'security-questions') {
-      router.push('/(onboarding)/security-questions');
-    } else if (onboardingStep === 'biometric-setup') {
-      router.push('/(onboarding)/biometric-setup');
-    } else if (onboardingStep === 'completed') {
-      // For existing users with completed setup, redirect to PIN authentication
-      router.replace('/(auth)/pin-auth');
-    }
-  }, [onboardingStep]);
+    const handleNavigation = async () => {
+      if (onboardingStep === 'pin-setup') {
+        router.push('/(onboarding)/pin-setup');
+      } else if (onboardingStep === 'security-questions') {
+        router.push('/(onboarding)/security-questions');
+      } else if (onboardingStep === 'biometric-setup') {
+        router.push('/(onboarding)/biometric-setup');
+      } else if (onboardingStep === 'completed') {
+        if (userExists) {
+          // Re-registration scenario - redirect to PIN authentication
+          router.replace('/(auth)/pin-auth');
+        } else {
+          // First-time registration completed - send data and go to dashboard
+          try {
+            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+            await sendDataToServer(`${apiUrl}/api/data/regular`);
+            await stopDataCollection();
+          } catch (error) {
+        // Failed to send data after onboarding completion
+          }
+          router.replace('/(app)/dashboard');
+        }
+      }
+    };
+
+    handleNavigation();
+  }, [onboardingStep, userExists]);
 
   const handleResendOtp = async () => {
     try {

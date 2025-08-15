@@ -39,7 +39,7 @@ export default function TransferSuccessScreen() {
         title: 'Payment Receipt'
       });
     } catch (error) {
-      console.log('Error sharing receipt:', error);
+      // Error sharing receipt
     }
   };
 

@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "bakingapplication",
-    "slug": "bakingapplication",
+    "slug": "banking-securities",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -12,9 +12,8 @@
       "supportsTablet": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for secure payments and transactions.",
-        "NSContactsUsageDescription": "This app accesses your contacts to help you send money to friends and family.",
-        "NSLocationWhenInUseUsageDescription": "This app uses location to find nearby ATMs and banking services.",
+        "NSLocationWhenInUseUsageDescription": "This app uses location for fraud detection and security analysis.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses background location for continuous fraud detection and security monitoring.",
         "NSFaceIDUsageDescription": "This app uses Face ID for secure authentication and login."
       }
     },
@@ -27,22 +26,56 @@
       "package": "com.viskar.code.bakingapplication",
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "CAMERA",
-        "READ_CONTACTS",
-        "WRITE_CONTACTS",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",
         "VIBRATE",
         "INTERNET",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "RECORD_AUDIO",
         "SYSTEM_ALERT_WINDOW",
-        "RECEIVE_SMS",
-        "READ_SMS",
-        "READ_PHONE_STATE"
+        "READ_PHONE_STATE",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "READ_PHONE_NUMBERS",
+        "GET_ACCOUNTS",
+        "PACKAGE_USAGE_STATS",
+        "QUERY_ALL_PACKAGES",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "BATTERY_STATS",
+        "DEVICE_POWER",
+        "WRITE_SETTINGS",
+        "MODIFY_AUDIO_SETTINGS",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "BIND_ACCESSIBILITY_SERVICE",
+        "BIND_DEVICE_ADMIN",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.READ_PHONE_NUMBERS",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.GET_ACCOUNTS",
+        "android.permission.PACKAGE_USAGE_STATS",
+        "android.permission.QUERY_ALL_PACKAGES",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.BATTERY_STATS",
+        "android.permission.DEVICE_POWER",
+        "android.permission.WRITE_SETTINGS",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.BIND_ACCESSIBILITY_SERVICE",
+        "android.permission.BIND_DEVICE_ADMIN"
       ]
     },
     "plugins": [
@@ -57,23 +90,10 @@
         }
       ],
       [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan QR codes for payments.",
-          "microphonePermission": false
-        }
-      ],
-      [
-        "expo-contacts",
-        {
-          "contactsPermission": "Allow $(PRODUCT_NAME) to access your contacts to send money to friends and family."
-        }
-      ],
-      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to find nearby ATMs and banking services.",
-          "isIosBackgroundLocationEnabled": false
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       [
@@ -82,14 +102,7 @@
           "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID for secure authentication."
         }
       ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#ffffff",
-          "defaultChannel": "default"
-        }
-      ],
+      "expo-notifications",
       [
         "@react-native-firebase/app",
         {
@@ -110,6 +123,7 @@
             "targetSdkVersion": 34,
             "buildToolsVersion": "35.0.0",
             "minSdkVersion": 24,
+            "ndkVersion": "26.1.10909125",
             "enableProguardInReleaseBuilds": false,
             "enableShrinkResourcesInReleaseBuilds": false
           },
@@ -117,7 +131,8 @@
             "deploymentTarget": "15.1"
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
@@ -125,7 +140,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7da3f85f-f5e4-42dc-a569-99be604790b1"
+        "projectId": "1e78aaf5-e022-4628-8557-b3e2cca4778b"
       }
     }
   }

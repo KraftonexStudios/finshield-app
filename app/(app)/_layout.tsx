@@ -25,6 +25,7 @@ export default function AppLayout() {
         <Stack.Screen name="beneficiary-list" />
         <Stack.Screen name="add-beneficiary" />
         <Stack.Screen name="transaction-details" />
+        <Stack.Screen name="data-analytics" />
       </Stack>
     </>
   );

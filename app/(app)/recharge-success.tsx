@@ -39,7 +39,7 @@ export default function RechargeSuccessScreen() {
         title: 'Recharge Receipt',
       });
     } catch (error) {
-      console.error('Error sharing receipt:', error);
+      // Error sharing receipt
     }
   };
 

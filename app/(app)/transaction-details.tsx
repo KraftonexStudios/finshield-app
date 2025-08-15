@@ -44,15 +44,15 @@ export default function TransactionDetailsScreen() {
 
   const handleShare = async () => {
     try {
-      const transactionDate = transaction.createdAt ? 
+      const transactionDate = transaction.createdAt ?
         (transaction.createdAt.toDate ? transaction.createdAt.toDate() : new Date(transaction.createdAt)) :
         new Date(transaction.date);
-      
+
       await Share.share({
         message: `Transaction Receipt\n\nAmount: ₹${transaction.amount}\nDescription: ${transaction.description}\nDate: ${transactionDate.toLocaleDateString('en-IN')}\nTransaction ID: ${transaction.id}\nStatus: ${transaction.status.toUpperCase()}`
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      // Error sharing
     }
   };
 
@@ -75,10 +75,10 @@ export default function TransactionDetailsScreen() {
         {/* Status */}
         <View className="items-center mb-8">
           <View className={`w-16 h-16 rounded-full items-center justify-center mb-4 ${transaction.status === 'completed' ? 'bg-green-500/20' :
-              transaction.status === 'pending' ? 'bg-yellow-500/20' : 'bg-red-500/20'
+            transaction.status === 'pending' ? 'bg-yellow-500/20' : 'bg-red-500/20'
             }`}>
             <Text className={`text-2xl ${transaction.status === 'completed' ? 'text-green-400' :
-                transaction.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
+              transaction.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
               }`}>
               {transaction.status === 'completed' ? '✓' :
                 transaction.status === 'pending' ? '⏳' : '✗'}
@@ -111,9 +111,9 @@ export default function TransactionDetailsScreen() {
             <Text className="text-gray-400">Date</Text>
             <Text className="text-white font-medium">
               {(() => {
-                const transactionDate = transaction.createdAt ? 
+                const transactionDate = transaction.createdAt ?
                   (transaction.createdAt.toDate ? transaction.createdAt.toDate() : new Date(transaction.createdAt)) :
-                  new Date(transaction.date);
+                  new Date(transaction.createdAt);
                 return transactionDate.toLocaleDateString('en-IN', {
                   year: 'numeric',
                   month: 'long',

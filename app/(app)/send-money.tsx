@@ -1,10 +1,12 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import PinVerification from '@/components/PinVerification';
+import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -14,9 +16,7 @@ Notifications.setNotificationHandler({
     shouldSetBadge: false,
     shouldShowBanner: true,
     shouldShowList: true,
-    // shouldShowAlert: true,
-    // shouldPlaySound: true,
-    // shouldSetBadge: false,
+
   }),
 });
 
@@ -29,6 +29,7 @@ interface Contact {
 
 export default function SendMoneyScreen() {
   const { user, processTransaction, findUserByMobile, refreshUserData } = useUserStore();
+  const { startDataCollection, isCollecting, collectionScenario } = useDataCollectionStore();
   const params = useLocalSearchParams();
   const [amount, setAmount] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
@@ -40,7 +41,7 @@ export default function SendMoneyScreen() {
   const [errors, setErrors] = useState<{ amount?: string; mobile?: string; general?: string }>({});
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
 
-  // Handle QR code parameters
+  // Handle QR code parameters and start data collection
   useEffect(() => {
     if (params.recipientMobile) {
       setMobileNumber(params.recipientMobile as string);
@@ -53,6 +54,21 @@ export default function SendMoneyScreen() {
       });
     }
   }, [params]);
+
+  // Start data collection when screen loads
+  useEffect(() => {
+    const initializeDataCollection = async () => {
+      if (!isCollecting && !collectionScenario) {
+        try {
+          await startDataCollection('login');
+        } catch (error) {
+          // Failed to start data collection
+        }
+      }
+    };
+
+    initializeDataCollection();
+  }, [isCollecting, collectionScenario, startDataCollection]);
 
   // Recent contacts will be loaded from database
   const [recentContacts, setRecentContacts] = useState<Contact[]>([]);
@@ -74,21 +90,7 @@ export default function SendMoneyScreen() {
     setShowContacts(false);
   };
 
-  // const validateForm = () => {
-  //   if (!amount || parseInt(amount) <= 0) {
-  //     Alert.alert('Invalid Amount', 'Please enter a valid amount');
-  //     return false;
-  //   }
-  //   if (!mobileNumber || mobileNumber.length < 10) {
-  //     Alert.alert('Invalid Mobile Number', 'Please enter a valid mobile number');
-  //     return false;
-  //   }
-  //   if (parseInt(amount) > (user?.balance || 0)) {
-  //     Alert.alert('Insufficient Balance', 'You do not have enough balance for this transaction');
-  //     return false;
-  //   }
-  //   return true;
-  // };
+
 
   const handleContinue = () => {
     if (validateForm()) {
@@ -108,7 +110,7 @@ export default function SendMoneyScreen() {
         trigger: null, // Show immediately
       });
     } catch (error) {
-      console.error('Failed to send notification:', error);
+      // Failed to send notification
     }
   };
 
@@ -302,7 +304,7 @@ export default function SendMoneyScreen() {
                 <View className="bg-white/5 border border-white/20 rounded-2xl px-5 py-4">
                   <View className="flex-row items-center">
                     <Text className="text-white text-xl mr-2">₹</Text>
-                    <TextInput
+                    <DataCollectionTextInput
                       value={formatCurrency(amount)}
                       onChangeText={(text) => {
                         handleAmountChange(text);
@@ -314,6 +316,7 @@ export default function SendMoneyScreen() {
                       placeholderTextColor="rgba(255, 255, 255, 0.5)"
                       className={`text-white text-xl flex-1 ${errors.amount ? 'text-red-400' : ''}`}
                       keyboardType="numeric"
+                      inputType="amount"
                     />
                   </View>
                 </View>
@@ -352,7 +355,7 @@ export default function SendMoneyScreen() {
               <View className="mb-6">
                 <Text className="text-white text-lg font-semibold mb-3">Send To</Text>
                 <View className="bg-white/5 border border-white/20 rounded-2xl px-5 py-4">
-                  <TextInput
+                  <DataCollectionTextInput
                     value={mobileNumber}
                     onChangeText={(text) => {
                       setMobileNumber(text);
@@ -365,6 +368,7 @@ export default function SendMoneyScreen() {
                     className={`text-white text-base ${errors.mobile ? 'text-red-400' : ''}`}
                     keyboardType="phone-pad"
                     maxLength={15}
+                    inputType="mobile"
                   />
                 </View>
                 {errors.mobile && (
@@ -431,7 +435,7 @@ export default function SendMoneyScreen() {
               <View className="mb-8">
                 <Text className="text-white text-lg font-semibold mb-3">Add Note (Optional)</Text>
                 <View className="bg-white/5 border border-white/20 rounded-2xl px-5 py-4">
-                  <TextInput
+                  <DataCollectionTextInput
                     value={note}
                     onChangeText={setNote}
                     placeholder="Enter a note for this transaction"
@@ -440,6 +444,7 @@ export default function SendMoneyScreen() {
                     multiline
                     numberOfLines={3}
                     maxLength={100}
+                    inputType="text"
                   />
                 </View>
               </View>

@@ -30,7 +30,7 @@ export default function PaymentQRScreen() {
         title: 'Payment QR Code',
       });
     } catch (error) {
-      console.error('Error sharing QR:', error);
+      // Error sharing QR
     }
   };
 

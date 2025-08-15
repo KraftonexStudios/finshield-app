@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, Text, Vibration, View } from 'react-native';
+import { useDataCollectionStore } from '../../stores/useDataCollectionStore';
 import { useUserStore } from '../../stores/useUserStore';
 
 // Import LocalAuthentication for native Android
@@ -9,7 +10,7 @@ let LocalAuthentication: any = null;
 try {
   LocalAuthentication = require('expo-local-authentication');
 } catch (error) {
-  console.warn('expo-local-authentication not available:', error);
+    // expo-local-authentication not available
 }
 
 export default function PinAuthScreen() {
@@ -17,6 +18,7 @@ export default function PinAuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const { loginWithPin, loginWithBiometric, user } = useUserStore();
+  const { sendDataAndWaitForResponse, stopDataCollection, startDataCollection, startSession, collectionScenario } = useDataCollectionStore();
 
   useEffect(() => {
     checkBiometricAvailability();
@@ -33,7 +35,7 @@ export default function PinAuthScreen() {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       setBiometricAvailable(hasHardware && isEnrolled);
     } catch (error) {
-      console.warn('Error checking biometric availability:', error);
+      // Error checking biometric availability
       setBiometricAvailable(false);
     }
   };
@@ -43,7 +45,16 @@ export default function PinAuthScreen() {
       setIsLoading(true);
       const success = await loginWithBiometric();
 
-      if (success) {
+      if (success && user) {
+        // Start data collection session after successful biometric verification
+        try {
+          await startSession(user.uid);
+          await startDataCollection('login');
+        } catch (dataCollectionError) {
+          // Failed to start data collection
+          // Don't block login flow if data collection fails
+        }
+        
         router.replace('/(app)/dashboard');
       } else {
         Alert.alert('Authentication Failed', 'Please try using your PIN instead.');
@@ -71,8 +82,39 @@ export default function PinAuthScreen() {
 
     try {
       const success = await loginWithPin(enteredPin);
-      if (success) {
-        router.replace('/(app)/dashboard');
+      if (success && user) {
+        // Check if this is a re-registration scenario
+        if (collectionScenario === 're-registration') {
+          try {
+            // Send data to check endpoint and wait for response
+            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+            const responseSuccess = await sendDataAndWaitForResponse(`${apiUrl}/api/data/check`);
+
+            if (responseSuccess) {
+              await stopDataCollection();
+              router.replace('/(app)/dashboard');
+            } else {
+              Alert.alert('Verification Failed', 'Please try again later.');
+              setPin('');
+            }
+          } catch (error) {
+            // Failed to send re-registration data
+            // Continue to dashboard even if data sending fails
+            await stopDataCollection();
+            router.replace('/(app)/dashboard');
+          }
+        } else {
+          // Regular login - start data collection session for login scenario
+          try {
+            await startSession(user.uid);
+            await startDataCollection('login');
+          } catch (dataCollectionError) {
+            // Failed to start data collection
+            // Don't block login flow if data collection fails
+          }
+          
+          router.replace('/(app)/dashboard');
+        }
       } else {
         Vibration.vibrate(500);
         Alert.alert('Incorrect PIN', 'Please try again');

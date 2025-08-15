@@ -9,7 +9,7 @@ let LocalAuthentication: any = null;
 try {
   LocalAuthentication = require('expo-local-authentication');
 } catch (error) {
-  console.warn('expo-local-authentication not available:', error);
+    // expo-local-authentication not available
 }
 
 type BiometricType = 'face' | 'fingerprint' | null;
@@ -49,13 +49,13 @@ export default function BiometricSetupScreen() {
   const checkBiometricAvailability = async () => {
     try {
       if (!LocalAuthentication) {
-        console.log('LocalAuthentication not available on this platform');
+        // LocalAuthentication not available on this platform
         return;
       }
 
       const isAvailable = await LocalAuthentication.hasHardwareAsync();
       if (!isAvailable) {
-        console.log('Biometric hardware not available');
+        // Biometric hardware not available
         return;
       }
 
@@ -77,7 +77,7 @@ export default function BiometricSetupScreen() {
         return option;
       }));
     } catch (error) {
-      console.error('Error checking biometric availability:', error);
+      // Error checking biometric availability
     }
   };
 
@@ -129,7 +129,7 @@ export default function BiometricSetupScreen() {
         );
       }
     } catch (error) {
-      console.error('Biometric setup error:', error);
+      // Biometric setup error
       Alert.alert('Error', 'Failed to set up biometric authentication.');
     }
   };

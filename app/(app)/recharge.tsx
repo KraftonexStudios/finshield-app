@@ -1,8 +1,9 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 interface RechargePlan {
   id: string;
@@ -190,7 +191,7 @@ export default function RechargeScreen() {
             {/* Mobile Number Input */}
             <View className="bg-white/5 rounded-2xl p-6 mb-6 border border-white/10">
               <Text className="text-white/70 text-sm mb-3">Mobile Number</Text>
-              <TextInput
+              <DataCollectionTextInput
                 value={mobileNumber}
                 onChangeText={setMobileNumber}
                 placeholder="Enter 10-digit mobile number"
@@ -198,6 +199,7 @@ export default function RechargeScreen() {
                 className="text-white text-lg bg-white/5 rounded-xl px-4 py-3 border border-white/10"
                 keyboardType="phone-pad"
                 maxLength={10}
+                inputType="amount"
               />
             </View>
 
@@ -269,8 +271,8 @@ export default function RechargeScreen() {
                         key={plan.id}
                         onPress={() => handlePlanSelect(plan)}
                         className={`p-4 rounded-2xl border ${selectedPlan?.id === plan.id
-                            ? 'bg-purple-500/20 border-purple-500'
-                            : 'bg-white/5 border-white/10'
+                          ? 'bg-purple-500/20 border-purple-500'
+                          : 'bg-white/5 border-white/10'
                           }`}
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.7 : 1,
@@ -295,8 +297,8 @@ export default function RechargeScreen() {
                         key={plan.id}
                         onPress={() => handlePlanSelect(plan)}
                         className={`p-4 rounded-2xl border ${selectedPlan?.id === plan.id
-                            ? 'bg-purple-500/20 border-purple-500'
-                            : 'bg-white/5 border-white/10'
+                          ? 'bg-purple-500/20 border-purple-500'
+                          : 'bg-white/5 border-white/10'
                           }`}
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.7 : 1,
@@ -321,8 +323,8 @@ export default function RechargeScreen() {
                         key={plan.id}
                         onPress={() => handlePlanSelect(plan)}
                         className={`p-4 rounded-2xl border ${selectedPlan?.id === plan.id
-                            ? 'bg-purple-500/20 border-purple-500'
-                            : 'bg-white/5 border-white/10'
+                          ? 'bg-purple-500/20 border-purple-500'
+                          : 'bg-white/5 border-white/10'
                           }`}
                         style={({ pressed }) => ({
                           opacity: pressed ? 0.7 : 1,
@@ -344,8 +346,8 @@ export default function RechargeScreen() {
                   <Pressable
                     onPress={handleCustomRecharge}
                     className={`p-4 rounded-2xl border ${isCustomRecharge
-                        ? 'bg-purple-500/20 border-purple-500'
-                        : 'bg-white/5 border-white/10'
+                      ? 'bg-purple-500/20 border-purple-500'
+                      : 'bg-white/5 border-white/10'
                       }`}
                     style={({ pressed }) => ({
                       opacity: pressed ? 0.7 : 1,
@@ -357,7 +359,7 @@ export default function RechargeScreen() {
 
                   {isCustomRecharge && (
                     <View className="mt-4">
-                      <TextInput
+                      <DataCollectionTextInput
                         value={customAmount}
                         onChangeText={setCustomAmount}
                         placeholder="Enter amount (min ₹10)"
@@ -365,6 +367,7 @@ export default function RechargeScreen() {
                         className="text-white text-lg bg-white/5 rounded-xl px-4 py-3 border border-white/10"
                         keyboardType="numeric"
                         maxLength={6}
+                        inputType="amount"
                       />
                     </View>
                   )}

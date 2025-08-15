@@ -1,7 +1,8 @@
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 export default function ContactsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -12,7 +13,7 @@ export default function ContactsScreen() {
   useEffect(() => {
     if (transactions && transactions.length > 0) {
       const contactsMap = new Map();
-      
+
       transactions
         .filter(tx => tx.type === 'transfer' && tx.toMobile && tx.toMobile !== user?.mobile)
         .forEach(tx => {
@@ -20,9 +21,9 @@ export default function ContactsScreen() {
           if (!contactsMap.has(mobile)) {
             contactsMap.set(mobile, {
               id: tx.toUserId || mobile,
-              name: tx.toName || 'Unknown',
+              name: tx.fromMobile || 'Unknown',
               mobile: mobile,
-              avatar: (tx.toName || 'UN').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
+              avatar: (tx.fromMobile || 'UN').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2),
               lastAmount: tx.amount,
               lastDate: tx.createdAt?.toDate ? tx.createdAt.toDate().toISOString() : new Date().toISOString()
             });
@@ -37,10 +38,10 @@ export default function ContactsScreen() {
             }
           }
         });
-      
+
       const contactsList = Array.from(contactsMap.values())
         .sort((a, b) => new Date(b.lastDate).getTime() - new Date(a.lastDate).getTime());
-      
+
       setContacts(contactsList);
     }
   }, [transactions, user?.mobile]);
@@ -64,12 +65,13 @@ export default function ContactsScreen() {
 
         {/* Search Bar */}
         <View className="bg-gray-900 rounded-xl px-4 py-3">
-          <TextInput
+          <DataCollectionTextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search contacts..."
             placeholderTextColor="#6B7280"
             className="text-white text-base"
+            inputType="text"
           />
         </View>
       </View>
