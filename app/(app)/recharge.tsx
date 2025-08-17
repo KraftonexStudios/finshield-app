@@ -2,6 +2,7 @@ import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { ArrowLeft, BarChart3, ChevronRight, DollarSign, Flame, Phone, PhoneCall, Radio, Signal, Smartphone } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -16,7 +17,7 @@ interface RechargePlan {
 interface RechargeProvider {
   id: string;
   name: string;
-  icon: string;
+  icon: React.ComponentType<any>;
   color: string;
   plans: RechargePlan[];
 }
@@ -33,7 +34,7 @@ export default function RechargeScreen() {
     {
       id: 'airtel',
       name: 'Airtel',
-      icon: '📶',
+      icon: Signal,
       color: 'bg-red-500',
       plans: [
         { id: '1', amount: 199, validity: '28 days', description: '1.5GB/day + Unlimited calls', type: 'popular' },
@@ -47,7 +48,7 @@ export default function RechargeScreen() {
     {
       id: 'jio',
       name: 'Jio',
-      icon: '📱',
+      icon: Smartphone,
       color: 'bg-blue-600',
       plans: [
         { id: '1', amount: 209, validity: '28 days', description: '1GB/day + Unlimited calls', type: 'popular' },
@@ -61,7 +62,7 @@ export default function RechargeScreen() {
     {
       id: 'vi',
       name: 'Vi (Vodafone Idea)',
-      icon: '📞',
+      icon: Phone,
       color: 'bg-red-600',
       plans: [
         { id: '1', amount: 219, validity: '28 days', description: '1GB/day + Unlimited calls', type: 'popular' },
@@ -75,7 +76,7 @@ export default function RechargeScreen() {
     {
       id: 'bsnl',
       name: 'BSNL',
-      icon: '📡',
+      icon: Radio,
       color: 'bg-yellow-600',
       plans: [
         { id: '1', amount: 187, validity: '28 days', description: '2GB/day + Unlimited calls', type: 'popular' },
@@ -163,10 +164,10 @@ export default function RechargeScreen() {
   };
 
   const planTypes = [
-    { id: 'popular', name: 'Popular', icon: '🔥' },
-    { id: 'data', name: 'Data', icon: '📊' },
-    { id: 'talktime', name: 'Talktime', icon: '☎️' },
-    { id: 'full_talktime', name: 'Full Talktime', icon: '💰' }
+    { id: 'popular', name: 'Popular', icon: Flame },
+    { id: 'data', name: 'Data', icon: BarChart3 },
+    { id: 'talktime', name: 'Talktime', icon: PhoneCall },
+    { id: 'full_talktime', name: 'Full Talktime', icon: DollarSign }
   ];
 
   return (
@@ -183,7 +184,7 @@ export default function RechargeScreen() {
                 onPress={() => router.back()}
                 className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mr-4"
               >
-                <Text className="text-white text-xl">←</Text>
+                <ArrowLeft size={20} color="white" />
               </Pressable>
               <Text className="text-2xl font-bold text-white">Mobile Recharge</Text>
             </View>
@@ -218,10 +219,10 @@ export default function RechargeScreen() {
                       })}
                     >
                       <View className={`w-12 h-12 ${provider.color} rounded-full items-center justify-center mr-4`}>
-                        <Text className="text-white text-xl">{provider.icon}</Text>
+                        <provider.icon size={20} color="white" />
                       </View>
                       <Text className="text-white font-medium flex-1">{provider.name}</Text>
-                      <Text className="text-white/40 text-xl">›</Text>
+                      <ChevronRight size={20} color="rgba(255, 255, 255, 0.4)" />
                     </Pressable>
                   ))}
                 </View>
@@ -236,10 +237,10 @@ export default function RechargeScreen() {
                     onPress={() => setSelectedProvider(null)}
                     className="mr-3"
                   >
-                    <Text className="text-white/60 text-xl">←</Text>
+                    <ArrowLeft size={20} color="rgba(255, 255, 255, 0.6)" />
                   </Pressable>
                   <View className={`w-10 h-10 ${selectedProvider.color} rounded-full items-center justify-center mr-3`}>
-                    <Text className="text-white">{selectedProvider.icon}</Text>
+                    <selectedProvider.icon size={16} color="white" />
                   </View>
                   <Text className="text-white text-lg font-semibold">{selectedProvider.name} Plans</Text>
                 </View>
@@ -255,7 +256,9 @@ export default function RechargeScreen() {
                           opacity: pressed ? 0.7 : 1,
                         })}
                       >
-                        <Text className="text-white text-sm mr-1">{type.icon}</Text>
+                        <View className="mr-1">
+                          <type.icon size={14} color="white" />
+                        </View>
                         <Text className="text-white text-sm font-medium">{type.name}</Text>
                       </Pressable>
                     ))}
@@ -264,7 +267,10 @@ export default function RechargeScreen() {
 
                 {/* Popular Plans */}
                 <View className="mb-6">
-                  <Text className="text-white text-lg font-semibold mb-4">🔥 Popular Plans</Text>
+                  <View className="flex-row items-center mb-4">
+                    <Flame size={18} color="#f97316" />
+                    <Text className="text-white text-lg font-semibold ml-2">Popular Plans</Text>
+                  </View>
                   <View className="space-y-3">
                     {getPlansByType('popular').map((plan) => (
                       <Pressable
@@ -290,7 +296,10 @@ export default function RechargeScreen() {
 
                 {/* Data Plans */}
                 <View className="mb-6">
-                  <Text className="text-white text-lg font-semibold mb-4">📊 Data Plans</Text>
+                  <View className="flex-row items-center mb-4">
+                    <BarChart3 size={18} color="#3b82f6" />
+                    <Text className="text-white text-lg font-semibold ml-2">Data Plans</Text>
+                  </View>
                   <View className="space-y-3">
                     {getPlansByType('data').map((plan) => (
                       <Pressable
@@ -316,7 +325,10 @@ export default function RechargeScreen() {
 
                 {/* Talktime Plans */}
                 <View className="mb-6">
-                  <Text className="text-white text-lg font-semibold mb-4">☎️ Talktime Plans</Text>
+                  <View className="flex-row items-center mb-4">
+                    <PhoneCall size={18} color="#10b981" />
+                    <Text className="text-white text-lg font-semibold ml-2">Talktime Plans</Text>
+                  </View>
                   <View className="space-y-3">
                     {getPlansByType('talktime').concat(getPlansByType('full_talktime')).map((plan) => (
                       <Pressable
@@ -342,7 +354,10 @@ export default function RechargeScreen() {
 
                 {/* Custom Recharge */}
                 <View className="mb-6">
-                  <Text className="text-white text-lg font-semibold mb-4">💰 Custom Recharge</Text>
+                  <View className="flex-row items-center mb-4">
+                    <DollarSign size={18} color="#eab308" />
+                    <Text className="text-white text-lg font-semibold ml-2">Custom Recharge</Text>
+                  </View>
                   <Pressable
                     onPress={handleCustomRecharge}
                     className={`p-4 rounded-2xl border ${isCustomRecharge
@@ -404,7 +419,9 @@ export default function RechargeScreen() {
               <View className="mb-6">
                 <Text className="text-white text-lg font-semibold mb-4">Recent Recharges</Text>
                 <View className="bg-white/5 rounded-2xl p-8 border border-white/10 items-center">
-                  <Text className="text-6xl mb-4">📱</Text>
+                  <View className="mb-4">
+                    <Smartphone size={64} color="rgba(255, 255, 255, 0.3)" />
+                  </View>
                   <Text className="text-white font-medium text-lg mb-2">No Recent Recharges</Text>
                   <Text className="text-white/60 text-center text-sm">
                     Your recent mobile recharges will appear here

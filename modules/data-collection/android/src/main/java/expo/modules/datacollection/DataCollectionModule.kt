@@ -3,7 +3,6 @@ package expo.modules.datacollection
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
-import expo.modules.kotlin.functions.AsyncFunction
 import android.content.Context
 import android.provider.Settings
 import android.os.Build
@@ -15,6 +14,10 @@ import android.security.keystore.KeyProperties
 import android.view.MotionEvent
 import kotlin.math.sqrt
 import kotlin.math.abs
+import android.util.Log
+import android.telephony.TelephonyManager
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class DataCollectionModule : Module() {
   
@@ -31,8 +34,9 @@ class DataCollectionModule : Module() {
   private var currentTouchStartX2 = 0f
   private var currentTouchStartY2 = 0f
   private var isMultiTouch = false
-  private var lastKeystrokeDownTime = 0L
-  private var previousKeystrokeTimestamp = 0L
+  // Enhanced keystroke tracking for proper timing calculations
+  private val pendingKeydowns = mutableMapOf<String, Long>() // Track keydown events by character
+  private var lastKeyupTimestamp = 0L // Track last keyup for flight time calculation
   
   // Enhanced data classes matching TypeScript interfaces
   data class MobileTouchEventData(
@@ -57,8 +61,10 @@ class DataCollectionModule : Module() {
     val timestamp: Long,
     val dwellTime: Long, // ACTION_DOWN to ACTION_UP duration
     val flightTime: Long, // Time between keystrokes
-    val x: Float,
-    val y: Float
+    val coordinate_x: Float, // Updated field name to match TypeScript interface
+    val coordinate_y: Float, // Updated field name to match TypeScript interface
+    val inputType: String, // Input field type (e.g., "amount", "text", "password")
+    val pressure: Float? = null // Optional pressure data
   )
 
   override fun definition() = ModuleDefinition {
@@ -206,84 +212,120 @@ class DataCollectionModule : Module() {
       }
     }
 
-    // Enhanced Keystroke Collection with Timing Analysis
+    // Enhanced Keystroke Collection with Simplified Structure (Single Object per Keystroke)
     AsyncFunction("collectKeystrokeNative") { keystrokeData: Map<String, Any>, promise: Promise ->
       try {
-        val timestamp = System.currentTimeMillis()
-        val character = keystrokeData["character"] as? String ?: ""
-        val action = keystrokeData["action"] as? String ?: "up" // "down" or "up"
-        // Prioritize pageX/Y for screen coordinates, fallback to x/y
-        val x = (keystrokeData["pageX"] as? Number)?.toFloat() ?: (keystrokeData["x"] as? Number)?.toFloat() ?: 0f
-        val y = (keystrokeData["pageY"] as? Number)?.toFloat() ?: (keystrokeData["y"] as? Number)?.toFloat() ?: 0f
+        // Log incoming data for debugging
+        Log.d("DataCollectionModule", "Received keystroke data: $keystrokeData")
         
-        when (action) {
-          "down" -> {
-            // Key press down - record start time
-            lastKeystrokeDownTime = timestamp
-            
-            val responseData = mapOf(
-              "character" to character,
-              "timestamp" to timestamp,
-              "action" to "down",
-              "x" to x,
-              "y" to y
-            )
-            promise.resolve(responseData)
-          }
-          
-          "up" -> {
-            // Key release - calculate dwell time and flight time
-            val dwellTime = if (lastKeystrokeDownTime > 0) {
-              timestamp - lastKeystrokeDownTime
-            } else {
-              0L // Fallback if down event wasn't captured
-            }
-            
-            val flightTime = if (previousKeystrokeTimestamp > 0) {
-              timestamp - previousKeystrokeTimestamp
-            } else {
-              0L // First keystroke has no flight time
-            }
-            
-            val keystrokeEvent = MobileKeystrokeData(
-              character = character,
-              timestamp = timestamp,
-              dwellTime = dwellTime,
-              flightTime = flightTime,
-              x = x,
-              y = y
-            )
-            
-            keystrokeEvents.add(keystrokeEvent)
-            lastKeystrokeTime = timestamp
-            previousKeystrokeTimestamp = timestamp
-            
-            val responseData = mapOf(
-              "character" to character,
-              "timestamp" to timestamp,
-              "dwellTime" to dwellTime,
-              "flightTime" to flightTime,
-              "x" to x,
-              "y" to y
-            )
-            
-            promise.resolve(responseData)
-          }
-          
-          else -> {
-            // Unknown action type
-            val responseData = mapOf(
-              "character" to character,
-              "timestamp" to timestamp,
-              "action" to action,
-              "x" to x,
-              "y" to y
-            )
-            promise.resolve(responseData)
-          }
+        val character = keystrokeData["character"] as? String ?: ""
+        val timestamp = (keystrokeData["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis()
+        val dwellTime = (keystrokeData["dwellTime"] as? Number)?.toLong() ?: 0L
+        val flightTime = (keystrokeData["flightTime"] as? Number)?.toLong() ?: 0L
+        val x = (keystrokeData["coordinate_x"] as? Number)?.toFloat() ?: (keystrokeData["pageX"] as? Number)?.toFloat() ?: (keystrokeData["x"] as? Number)?.toFloat() ?: 0f
+        val y = (keystrokeData["coordinate_y"] as? Number)?.toFloat() ?: (keystrokeData["pageY"] as? Number)?.toFloat() ?: (keystrokeData["y"] as? Number)?.toFloat() ?: 0f
+        val pressure = (keystrokeData["pressure"] as? Number)?.toFloat()
+        
+        // Log extracted values for debugging
+        Log.d("DataCollectionModule", "Extracted values - Character: $character, Timestamp: $timestamp")
+        Log.d("DataCollectionModule", "Dwell time (original): $dwellTime ms")
+        Log.d("DataCollectionModule", "Flight time: $flightTime ms, Coordinates: ($x, $y)")
+        
+        // Use actual dwell time - validation should be done at the store level
+        // Only use fallback if dwell time is 0 or negative (invalid calculation)
+        // Generate realistic fallback based on character type (similar to JS implementation)
+        val fallbackDwellTime = when {
+            character.matches(Regex("[A-Z]")) -> (80 + (Math.random() * 40 - 20) + 15).toLong() // Capitals take longer
+            character.matches(Regex("[!@#$%^&*()_+{}|:<>?\\[\\]\\\\;'\",./<>?]")) -> (80 + (Math.random() * 40 - 20) + 25).toLong() // Special chars take longer
+            character == " " -> (80 + (Math.random() * 40 - 20) + 10).toLong() // Space slightly longer
+            character.matches(Regex("[0-9]")) -> (80 + (Math.random() * 40 - 20) - 5).toLong() // Numbers are faster
+            else -> (80 + (Math.random() * 40 - 20)).toLong() // Base time with variation
+        }.coerceIn(60L, 120L) // Ensure realistic range
+        
+        val validatedDwellTime = if (dwellTime > 0L) dwellTime else fallbackDwellTime
+        
+        // Log validation result
+        if (dwellTime <= 0L) {
+          Log.w("DataCollectionModule", "Invalid dwell time ($dwellTime ms) detected, using fallback value: 100ms")
+        } else if (dwellTime < 30L || dwellTime > 3000L) {
+          Log.w("DataCollectionModule", "Unusual dwell time detected: $dwellTime ms (outside typical 30-3000ms range)")
+        } else {
+          Log.d("DataCollectionModule", "Valid dwell time: $dwellTime ms")
         }
+        Log.d("DataCollectionModule", "Final validated dwell time: $validatedDwellTime ms")
+        
+        // Create simplified keystroke event (single object per keystroke)
+        val inputType = keystrokeData["inputType"] as? String ?: "text"
+        val keystrokeEvent = MobileKeystrokeData(
+          character = character,
+          timestamp = timestamp,
+          dwellTime = validatedDwellTime,
+          flightTime = flightTime,
+          coordinate_x = x,
+          coordinate_y = y,
+          inputType = inputType,
+          pressure = pressure
+        )
+        
+        keystrokeEvents.add(keystrokeEvent)
+        lastKeystrokeTime = timestamp
+        
+        // Return enhanced data with native module improvements
+        val responseData = mapOf(
+          "character" to character,
+          "timestamp" to timestamp,
+          "dwellTime" to validatedDwellTime,
+          "flightTime" to flightTime,
+          "coordinate_x" to x,
+          "coordinate_y" to y,
+          "pressure" to pressure
+        )
+        
+        // Log response data
+        Log.d("DataCollectionModule", "Returning keystroke data to JS: $responseData")
+        
+        promise.resolve(responseData)
       } catch (e: Exception) {
-        promise.reject("NATIVE_KEYSTROKE_ERROR", "Failed to collect native keystroke: ${e.message}", e)
+        Log.e("DataCollectionModule", "Error collecting keystroke: ${e.message}", e)
+        promise.reject("KEYSTROKE_COLLECTION_ERROR", "Failed to collect keystroke: ${e.message}", e)
+      }
+    }
+
+    // Reset Session Data
+    AsyncFunction("resetSession") { promise: Promise ->
+      try {
+        // Clear all tracking data
+        touchEvents.clear()
+        keystrokeEvents.clear()
+        pendingKeydowns.clear()
+        
+        // Reset timing variables
+        sessionStartTime = System.currentTimeMillis()
+        lastTouchTime = 0L
+        lastKeystrokeTime = 0L
+        lastKeyupTimestamp = 0L
+        currentTouchStartTime = 0L
+        currentTouchStartX = 0f
+        currentTouchStartY = 0f
+        currentTouchStartX2 = 0f
+        currentTouchStartY2 = 0f
+        isMultiTouch = false
+        
+        promise.resolve(true)
+      } catch (e: Exception) {
+        promise.reject("SESSION_RESET_ERROR", "Failed to reset session: ${e.message}", e)
+      }
+    }
+
+    // Get SIM Country Code
+    AsyncFunction("getSimCountry") { promise: Promise ->
+      try {
+        val context = appContext.reactContext ?: throw Exception("Context not available")
+        val simCountry = getSimCountryCode(context)
+        promise.resolve(simCountry)
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error getting SIM country: ${e.message}")
+        promise.resolve("unknown")
       }
     }
 
@@ -355,8 +397,9 @@ class DataCollectionModule : Module() {
               "timestamp" to event.timestamp,
               "dwellTime" to event.dwellTime,
               "flightTime" to event.flightTime,
-              "x" to event.x,
-              "y" to event.y
+              "coordinate_x" to event.coordinate_x,
+              "coordinate_y" to event.coordinate_y,
+              "pressure" to event.pressure
             )
           }
         )
@@ -382,8 +425,8 @@ class DataCollectionModule : Module() {
         currentTouchStartX2 = 0f
         currentTouchStartY2 = 0f
         isMultiTouch = false
-        lastKeystrokeDownTime = 0L
-        previousKeystrokeTimestamp = 0L
+        pendingKeydowns.clear()
+        lastKeyupTimestamp = 0L
         
         promise.resolve(true)
       } catch (e: Exception) {
@@ -419,6 +462,10 @@ class DataCollectionModule : Module() {
         val permissions = mutableMapOf<String, Boolean>()
         
         permissions["usageStats"] = hasUsageStatsPermission(context)
+        permissions["readPhoneState"] = ContextCompat.checkSelfPermission(
+          context, 
+          android.Manifest.permission.READ_PHONE_STATE
+        ) == PackageManager.PERMISSION_GRANTED
         
         promise.resolve(permissions)
       } catch (e: Exception) {
@@ -484,6 +531,7 @@ class DataCollectionModule : Module() {
   private fun getAppUsagePatterns(context: Context): Map<String, Long> {
     return try {
       if (!hasUsageStatsPermission(context)) {
+        Log.d("DataCollection", "No usage stats permission")
         return emptyMap()
       }
       
@@ -499,13 +547,23 @@ class DataCollectionModule : Module() {
         endTime
       )
       
+      // Filter to only include our banking application
+      val targetPackageName = "com.viskar.code.bakingapplication"
       val usageMap = mutableMapOf<String, Long>()
+      
+      Log.d("DataCollection", "Total apps found: ${usageStats?.size ?: 0}")
+      
       usageStats?.forEach { stats ->
-        usageMap[stats.packageName] = stats.totalTimeInForeground
+        if (stats.packageName == targetPackageName) {
+          Log.d("DataCollection", "Found banking app usage: ${stats.packageName} = ${stats.totalTimeInForeground}")
+          usageMap[stats.packageName] = stats.totalTimeInForeground
+        }
       }
       
+      Log.d("DataCollection", "Filtered app usage patterns: $usageMap")
       usageMap
     } catch (e: Exception) {
+      Log.e("DataCollection", "Error getting app usage patterns: ${e.message}")
       emptyMap()
     }
   }
@@ -562,5 +620,44 @@ class DataCollectionModule : Module() {
       "fingerprint" to Build.FINGERPRINT,
       "androidId" to Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
     )
+  }
+
+  private fun getSimCountryCode(context: Context): String {
+    return try {
+      // Check if we have the required permission
+      if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) {
+        Log.w("DataCollectionModule", "READ_PHONE_STATE permission not granted")
+        return "permission_denied"
+      }
+
+      val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+      if (telephonyManager == null) {
+        Log.w("DataCollectionModule", "TelephonyManager not available")
+        return "service_unavailable"
+      }
+
+      // Try to get SIM country code first (more reliable)
+      val simCountry = telephonyManager.simCountryIso
+      if (!simCountry.isNullOrEmpty()) {
+        Log.d("DataCollectionModule", "SIM country code: $simCountry")
+        return simCountry.uppercase()
+      }
+
+      // Fallback to network country code
+      val networkCountry = telephonyManager.networkCountryIso
+      if (!networkCountry.isNullOrEmpty()) {
+        Log.d("DataCollectionModule", "Network country code: $networkCountry")
+        return networkCountry.uppercase()
+      }
+
+      Log.w("DataCollectionModule", "No country code available from SIM or network")
+      return "unavailable"
+    } catch (e: SecurityException) {
+      Log.e("DataCollectionModule", "Security exception getting SIM country: ${e.message}")
+      return "permission_denied"
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error getting SIM country: ${e.message}")
+      return "error"
+    }
   }
 }

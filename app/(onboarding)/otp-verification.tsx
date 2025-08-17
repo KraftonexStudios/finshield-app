@@ -4,12 +4,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useOtpVerify } from 'react-native-otp-verify';
 
+import { AlertTriangle } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, View } from 'react-native';
 
 export default function OtpVerificationScreen() {
   const { mobileNumber, verifyOTP, resendOTP, isLoading, error, onboardingStep, userExists } = useUserStore();
-  const { sendDataToServer, stopDataCollection, startDataCollection } = useDataCollectionStore();
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -69,14 +69,22 @@ export default function OtpVerificationScreen() {
     try {
       await verifyOTP(otpCode);
 
-      // Handle data collection based on user type
+      // Now we know the user ID and type, update data collection accordingly
+      const { setUserId, startDataCollection } = useDataCollectionStore.getState();
+      const { user } = useUserStore.getState();
+
+      // Set user ID for data collection
+      if (user?.uid) {
+        setUserId(user.uid);
+      }
+
+      // Update collection scenario based on user type
       if (userExists) {
-        // Re-registration scenario - continue collecting until PIN verification
+        // User is re-registering - update scenario
         await startDataCollection('re-registration');
       } else {
-        // First-time registration - continue collecting until onboarding complete
-        // Data collection already started in permissions screen
-        // Continuing data collection for first-time registration
+        // User is new - update scenario from initial to first-time
+        await startDataCollection('first-time-registration');
       }
 
       // Navigation will be handled by the store based on user setup status
@@ -88,32 +96,21 @@ export default function OtpVerificationScreen() {
 
   // Navigate based on onboarding step changes
   useEffect(() => {
-    const handleNavigation = async () => {
-      if (onboardingStep === 'pin-setup') {
-        router.push('/(onboarding)/pin-setup');
-      } else if (onboardingStep === 'security-questions') {
-        router.push('/(onboarding)/security-questions');
-      } else if (onboardingStep === 'biometric-setup') {
-        router.push('/(onboarding)/biometric-setup');
-      } else if (onboardingStep === 'completed') {
-        if (userExists) {
-          // Re-registration scenario - redirect to PIN authentication
-          router.replace('/(auth)/pin-auth');
-        } else {
-          // First-time registration completed - send data and go to dashboard
-          try {
-            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-            await sendDataToServer(`${apiUrl}/api/data/regular`);
-            await stopDataCollection();
-          } catch (error) {
-        // Failed to send data after onboarding completion
-          }
-          router.replace('/(app)/dashboard');
-        }
+    if (onboardingStep === 'pin-setup') {
+      router.push('/(onboarding)/pin-setup');
+    } else if (onboardingStep === 'security-questions') {
+      router.push('/(onboarding)/security-questions');
+    } else if (onboardingStep === 'biometric-setup') {
+      router.push('/(onboarding)/biometric-setup');
+    } else if (onboardingStep === 'completed') {
+      if (userExists) {
+        // Re-registration scenario - redirect to PIN authentication
+        router.replace('/(auth)/pin-auth');
+      } else {
+        // For first-time users, navigate to loading screen which will handle data submission
+        router.push('./loading-setup');
       }
-    };
-
-    handleNavigation();
+    }
   }, [onboardingStep, userExists]);
 
   const handleResendOtp = async () => {
@@ -242,9 +239,12 @@ export default function OtpVerificationScreen() {
 
               {timeoutError && (
                 <View className="mt-3 p-3 bg-yellow-400/20 rounded-lg border border-yellow-400/30">
-                  <Text className="text-yellow-400 text-xs font-medium">
-                    ⚠️ SMS detection timeout. Listening restarted automatically.
-                  </Text>
+                  <View className="flex-row items-center">
+                    <AlertTriangle size={16} color="#facc15" style={{ marginRight: 8 }} />
+                    <Text className="text-yellow-400 text-xs font-medium">
+                      SMS detection timeout. Listening restarted automatically.
+                    </Text>
+                  </View>
                 </View>
               )}
             </View>

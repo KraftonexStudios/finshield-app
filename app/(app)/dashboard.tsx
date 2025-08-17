@@ -1,14 +1,14 @@
+import { TouchTrackingWrapper } from '@/components/TouchTrackingWrapper';
 import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
+import { ArrowDown, ArrowDownToLine, ArrowUp, BarChart3, CreditCard, Eye, EyeOff, Send, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { AppState, Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
-import { TouchTrackingWrapper } from '@/components/TouchTrackingWrapper';
 
 export default function DashboardScreen() {
-  console.log("🟢 Dashboard component loaded with endSession test button");
-  const { user, logout, transactions, fetchTransactions, subscribeToTransactions, subscribeToBalance, refreshUserData } = useUserStore();
-  const { startSession, startDataCollection, handleAppStateChange, sendDataToServer, stopDataCollection, collectionScenario, currentSession } = useDataCollectionStore();
+  const { user, transactions, fetchTransactions, subscribeToTransactions, subscribeToBalance, refreshUserData } = useUserStore();
+  const { startSession, startDataCollection, handleAppStateChange, collectionScenario, currentSession } = useDataCollectionStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
 
@@ -39,8 +39,8 @@ export default function DashboardScreen() {
             const hasMinimumData = touchEvents.length > 5 || motionPatterns.length > 3;
 
             // Always send data when app goes to background regardless of quality
-            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-            await sendDataToServer(`${apiUrl}/api/data/regular`);
+            // Use proper session handling with endSessionAndSendData
+            await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
           } catch (error) {
             // Failed to send data on background
           }
@@ -68,14 +68,9 @@ export default function DashboardScreen() {
             const hasMinimumData = touchEvents.length > 5 || motionPatterns.length > 3;
 
             // Always send data on app closure regardless of quality
-            // End session properly (this will also send data to server)
-            const session = await useDataCollectionStore.getState().endSession();
-            if (!session) {
-              // Fallback: send data manually if endSession fails
-              const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
-              await sendDataToServer(`${apiUrl}/api/data/regular`);
-              // Note: Don't call stopDataCollection here as endSession already handles it
-            }
+            // End session properly and send data to server
+            await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
+            // Note: endSessionAndSendData handles both ending session and sending data
           } catch (error) {
             // Failed to send data on cleanup
           }
@@ -85,20 +80,7 @@ export default function DashboardScreen() {
     };
   }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
-  const quickActions = [
-    { id: 'transfer', title: 'Transfer', icon: '💸', color: 'bg-blue-500' },
-    { id: 'pay', title: 'Pay Bills', icon: '📄', color: 'bg-green-500' },
-    { id: 'recharge', title: 'Recharge', icon: '📱', color: 'bg-purple-500' },
-    { id: 'scan', title: 'Scan QR', icon: '📷', color: 'bg-orange-500' },
-  ];
 
   // Get recent transactions from store (limit to 3 for dashboard)
   const recentTransactions = transactions.slice(0, 3);
@@ -122,16 +104,14 @@ export default function DashboardScreen() {
     console.log("🟡 User interaction detected:", {
       hasCollectionScenario: !!collectionScenario,
       hasCurrentSession: !!currentSession,
-      userId: user?.id || 'dashboard_user'
+      userId: user?.uid || 'dashboard_user'
     });
-    
+
     if (!currentSession) {
-      console.log("🟢 Starting session and data collection for user interaction");
       // First start a session, then start data collection
-      await startSession(user?.id || 'dashboard_user');
+      await startSession(user?.uid || 'dashboard_user');
       await startDataCollection('login');
     } else if (!collectionScenario) {
-      console.log("🟢 Session exists but no data collection - starting collection");
       await startDataCollection('login');
     } else {
       console.log("🟡 Session and data collection already active");
@@ -167,7 +147,7 @@ export default function DashboardScreen() {
                 onPress={() => router.push('/(app)/profile')}
                 className="w-10 h-10 bg-gray-800 rounded-full items-center justify-center"
               >
-                <Text className="text-white text-lg">👤</Text>
+                <User size={20} color="white" />
               </Pressable>
             </View>
 
@@ -187,7 +167,7 @@ export default function DashboardScreen() {
                   onPress={() => setBalanceVisible(!balanceVisible)}
                   className="ml-3 bg-gray-800 rounded-full p-2"
                 >
-                  <Text className="text-white text-sm">{balanceVisible ? '👁️' : '👁️‍🗨️'}</Text>
+                  {balanceVisible ? <Eye size={16} color="white" /> : <EyeOff size={16} color="white" />}
                 </Pressable>
               </View>
               <Text className="text-gray-400 text-sm">Available Balance</Text>
@@ -230,7 +210,7 @@ export default function DashboardScreen() {
                 className="bg-purple-600 rounded-2xl p-6 flex-1 mr-2 items-center"
               >
                 <View className="w-12 h-12 bg-white/20 rounded-full items-center justify-center mb-2">
-                  <Text className="text-white text-xl">💸</Text>
+                  <Send size={24} color="white" />
                 </View>
                 <Text className="text-white text-sm font-medium">Send Money</Text>
               </Pressable>
@@ -240,7 +220,7 @@ export default function DashboardScreen() {
                 className="bg-gray-900 rounded-2xl p-6 flex-1 ml-2 items-center"
               >
                 <View className="w-12 h-12 bg-purple-500/20 rounded-full items-center justify-center mb-2">
-                  <Text className="text-purple-400 text-xl">📥</Text>
+                  <ArrowDownToLine size={24} color="#a855f7" />
                 </View>
                 <Text className="text-white text-sm font-medium">Request Money</Text>
               </Pressable>
@@ -281,7 +261,7 @@ export default function DashboardScreen() {
             ) : (
               <View className="bg-gray-700/50 rounded-2xl p-6 items-center border-2 border-dashed border-gray-600 mb-4">
                 <View className="w-12 h-12 bg-gray-600 rounded-full items-center justify-center mb-3">
-                  <Text className="text-gray-400 text-xl">💳</Text>
+                  <CreditCard size={24} color="#9ca3af" />
                 </View>
                 <Text className="text-white font-medium text-center mb-2">
                   No Virtual Card
@@ -313,10 +293,10 @@ export default function DashboardScreen() {
                       <View className="flex-row items-center flex-1">
                         <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${transaction.type === 'credit' ? 'bg-green-500/20' : 'bg-red-500/20'
                           }`}>
-                          <Text className={`text-lg ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                            {transaction.type === 'credit' ? '↓' : '↑'}
-                          </Text>
+                          {transaction.type === 'credit' ?
+                            <ArrowDown size={18} color="#4ade80" /> :
+                            <ArrowUp size={18} color="#f87171" />
+                          }
                         </View>
                         <View className="flex-1">
                           <Text className="text-white font-medium">
@@ -355,7 +335,7 @@ export default function DashboardScreen() {
             ) : (
               <View className="bg-gray-800/50 rounded-2xl p-8 items-center">
                 <View className="w-16 h-16 bg-gray-700 rounded-full items-center justify-center mb-4">
-                  <Text className="text-gray-400 text-2xl">📊</Text>
+                  <BarChart3 size={32} color="#9ca3af" />
                 </View>
                 <Text className="text-white font-medium text-center mb-2">
                   No Transactions Yet

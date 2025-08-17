@@ -1,7 +1,7 @@
 -- Merging decision tree log ---
 manifest
-ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:1:1-10:12
-INJECTED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:1:1-10:12
+ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:1:1-11:12
+INJECTED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:1:1-11:12
 	package
 		INJECTED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml
 	xmlns:tools
@@ -26,12 +26,16 @@ uses-permission#android.permission.REQUEST_INSTALL_PACKAGES
 ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:6:3-81
 	android:name
 		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:6:20-78
-uses-feature#android.hardware.location.gps
-ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:9:3-89
-	android:required
-		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:9:62-86
+uses-permission#android.permission.READ_PHONE_STATE
+ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:7:3-73
 	android:name
-		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:9:17-61
+		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:7:20-70
+uses-feature#android.hardware.location.gps
+ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:10:3-89
+	android:required
+		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:10:62-86
+	android:name
+		ADDED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml:10:17-61
 uses-sdk
 INJECTED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from S:\Fraude-detection\reversion-banking-application\modules\data-collection\android\src\main\AndroidManifest.xml

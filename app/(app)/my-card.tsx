@@ -11,18 +11,18 @@ export default function MyCardScreen() {
   const [showPin, setShowPin] = useState(false);
   const [showCardNumber, setShowCardNumber] = useState(false);
 
-  // Card data from user store or default values
+  // Card data - using default values for demo purposes
   const cardData = {
-    cardNumber: user?.cardNumber || '4532 1234 5678 9012',
-    expiryDate: user?.cardExpiry || '12/28',
-    cvv: user?.cardCvv || '123',
-    pin: user?.cardPin || '1234',
-    cardType: user?.cardType || 'VISA',
+    cardNumber: '4532 1234 5678 9012',
+    expiryDate: '12/28',
+    cvv: '123',
+    pin: '1234',
+    cardType: 'VISA',
     cardName: 'DEBIT CARD'
   };
 
-  // Check if user has a card
-  const hasCard = user?.hasCard || true; // Default to true for demo purposes
+  // Check if user has a card - default to true for demo purposes
+  const hasCard = true;
 
   const formatCardNumber = (number: string, show: boolean) => {
     if (show) return number;

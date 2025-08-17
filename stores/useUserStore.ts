@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { firebaseService } from "../services/firebaseService";
+import { FirebaseTransaction } from "../types/firebase";
 import { secureStorage } from "../utils/secureStorage";
 
 // User interface based on Firebase data
@@ -103,6 +104,7 @@ export interface AuthState {
   // Actions
   initializeStore: () => Promise<void>;
   setUser: (user: User) => void;
+  setUserWithAuth: (user: User) => void;
   clearUser: () => void;
   setError: (error: string | null) => void;
   setOnboardingStep: (step: AuthState["onboardingStep"]) => void;
@@ -133,8 +135,8 @@ export interface AuthState {
   // Banking Actions
   processTransaction: (
     transactionData: Omit<
-      Transaction,
-      "id" | "createdAt" | "updatedAt" | "fromUserId" | "reference" | "status"
+      FirebaseTransaction,
+      "id" | "createdAt" | "updatedAt" | "fromUserId"
     >
   ) => Promise<string>;
   subscribeToTransactions: () => void;
@@ -225,7 +227,8 @@ export const useUserStore = create<AuthState>()(
       },
 
       // Basic setters
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => set({ user }),
+      setUserWithAuth: (user) => set({ user, isAuthenticated: true }),
       clearUser: () => {
         get().unsubscribeAll();
         set({ user: null, isAuthenticated: false });
@@ -255,8 +258,11 @@ export const useUserStore = create<AuthState>()(
         } catch (error) {
           console.error("Error checking user existence:", error);
 
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+
           // Handle specific error messages from backend
-          if (error.message.includes("User not found")) {
+          if (errorMessage.includes("User not found")) {
             set({
               userExists: false,
               error:
@@ -266,7 +272,7 @@ export const useUserStore = create<AuthState>()(
           } else {
             set({
               error:
-                error.message ||
+                errorMessage ||
                 "Failed to verify user registration. Please try again.",
             });
           }
@@ -286,8 +292,10 @@ export const useUserStore = create<AuthState>()(
           });
         } catch (error) {
           console.error("Error sending OTP:", error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           set({
-            error: error.message || "Failed to send OTP. Please try again.",
+            error: errorMessage || "Failed to send OTP. Please try again.",
           });
           throw error;
         } finally {
@@ -304,8 +312,10 @@ export const useUserStore = create<AuthState>()(
           });
         } catch (error) {
           console.error("Error resending OTP:", error);
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
           set({
-            error: error.message || "Failed to resend OTP. Please try again.",
+            error: errorMessage || "Failed to resend OTP. Please try again.",
           });
           throw error;
         } finally {
@@ -348,15 +358,42 @@ export const useUserStore = create<AuthState>()(
           if (!hasPinSetup) {
             // New user - proceed with setting up PIN, Biometric, Questions
             set({ onboardingStep: "pin-setup" });
+
+            // Set data collection scenario for first-time registration
+            try {
+              const { startDataCollection, setUserId } =
+                require("@/stores/useDataCollectionStore").useDataCollectionStore.getState();
+              setUserId(userData.uid);
+              await startDataCollection("first-time-registration");
+            } catch (error) {
+              console.warn(
+                "Failed to start data collection for first-time registration:",
+                error
+              );
+            }
           } else if (hasPinSetup && hasSecurityQuestions) {
             // Existing user reregistering - redirect to PIN auth for login
             set({
               onboardingStep: "completed",
               onboardingComplete: true,
             });
+
+            // Set data collection scenario for re-registration before navigation
+            try {
+              const { startDataCollection, setUserId } =
+                require("@/stores/useDataCollectionStore").useDataCollectionStore.getState();
+              setUserId(userData.uid);
+              await startDataCollection("re-registration");
+            } catch (error) {
+              console.warn(
+                "Failed to start data collection for re-registration:",
+                error
+              );
+            }
+
             // Use router to navigate to login PIN screen
             setTimeout(() => {
-              require("expo-router").router.replace("/(auth)/login-pin");
+              require("expo-router").router.replace("/(auth)/pin-auth");
             }, 100);
           } else if (hasPinSetup && !hasSecurityQuestions) {
             // User has PIN but no security questions
@@ -450,9 +487,10 @@ export const useUserStore = create<AuthState>()(
 
           set({
             biometricType: type,
-            onboardingStep: "completed",
-            onboardingComplete: true,
           });
+
+          // Complete onboarding and authenticate user
+          await get().completeOnboarding();
         } catch (error) {
           console.error("Error setting up biometric:", error);
           set({
@@ -471,6 +509,7 @@ export const useUserStore = create<AuthState>()(
           set({
             onboardingComplete: true,
             onboardingStep: "completed",
+            isAuthenticated: true, // Set authentication to true only after complete registration
           });
         } catch (error) {
           console.error("Error completing onboarding:", error);
@@ -504,6 +543,9 @@ export const useUserStore = create<AuthState>()(
           // Clear stored credentials
           await get().clearStoredCredentials();
 
+          // Clear persisted Zustand storage
+          await secureStorage.removeItem("user-storage");
+
           // Clear user session and reset state
           set({
             isAuthenticated: false,
@@ -521,6 +563,10 @@ export const useUserStore = create<AuthState>()(
             securityQuestions: [],
             error: null,
           });
+
+          // Navigate to get-started screen after successful logout
+          const { router } = await import("expo-router");
+          router.replace("/(onboarding)/get-started");
         } catch (error) {
           console.error("Error during logout:", error);
           set({ error: "Failed to logout. Please try again." });
@@ -533,13 +579,8 @@ export const useUserStore = create<AuthState>()(
       // Banking Actions
       processTransaction: async (
         transactionData: Omit<
-          Transaction,
-          | "id"
-          | "createdAt"
-          | "updatedAt"
-          | "fromUserId"
-          | "reference"
-          | "status"
+          FirebaseTransaction,
+          "id" | "createdAt" | "updatedAt" | "fromUserId"
         >
       ) => {
         set({ isLoading: true, error: null });

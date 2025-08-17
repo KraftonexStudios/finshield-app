@@ -2,6 +2,7 @@ import { TextInputWrapper } from '@/components/TextInputWrapper';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { ArrowLeft, Lock } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, TextInput, View } from 'react-native';
 
@@ -132,7 +133,7 @@ export default function PinSetupScreen() {
                 onPress={handleBack}
                 className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mb-8"
               >
-                <Text className="text-white text-xl">←</Text>
+                <ArrowLeft size={24} color="white" />
               </Pressable>
 
               <Text className="text-3xl font-bold text-white mb-3">
@@ -222,9 +223,12 @@ export default function PinSetupScreen() {
 
             {/* Security Info */}
             <View className="bg-white/5 rounded-2xl p-5 mt-6 border border-white/10">
-              <Text className="text-white text-sm font-semibold mb-2">
-                🔐 PIN Security Tips
-              </Text>
+              <View className="flex-row items-center mb-2">
+                <Lock size={16} color="white" style={{ marginRight: 8 }} />
+                <Text className="text-white text-sm font-semibold">
+                  PIN Security Tips
+                </Text>
+              </View>
               <Text className="text-white/70 text-sm leading-5">
                 • Choose a PIN that's easy for you to remember{"\n"}
                 • Don't use obvious combinations like 1234 or your birth year{"\n"}

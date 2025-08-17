@@ -2,6 +2,7 @@ import DataCollectionTextInput from '@/components/DataCollectionTextInput';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { ArrowLeft, ChevronDown, ChevronUp, Lock } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -113,7 +114,7 @@ export default function SecurityQuestionsScreen() {
                   onPress={() => router.back()}
                   className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mb-8"
                 >
-                  <Text className="text-white text-xl">←</Text>
+                  <ArrowLeft size={24} color="white" />
                 </Pressable>
 
                 <Text className="text-3xl font-bold text-white mb-3">
@@ -141,9 +142,13 @@ export default function SecurityQuestionsScreen() {
                         <Text className="text-white flex-1 text-base">
                           {item.question}
                         </Text>
-                        <Text className="text-white/60 text-lg ml-2">
-                          {selectedQuestionIndex === index ? '▲' : '▼'}
-                        </Text>
+                        <View className="ml-2">
+                          {selectedQuestionIndex === index ? (
+                            <ChevronUp size={20} color="rgba(255, 255, 255, 0.6)" />
+                          ) : (
+                            <ChevronDown size={20} color="rgba(255, 255, 255, 0.6)" />
+                          )}
+                        </View>
                       </View>
                     </Pressable>
 
@@ -185,9 +190,12 @@ export default function SecurityQuestionsScreen() {
 
               {/* Info Section */}
               <View className="bg-white/5 rounded-2xl p-5 mb-8 border border-white/10">
-                <Text className="text-white text-sm font-semibold mb-2">
-                  🔒 Security Tips
-                </Text>
+                <View className="flex-row items-center mb-2">
+                  <Lock size={16} color="white" style={{ marginRight: 8 }} />
+                  <Text className="text-white text-sm font-semibold">
+                    Security Tips
+                  </Text>
+                </View>
                 <Text className="text-white/70 text-sm leading-5">
                   • Choose answers you'll remember easily{"\n"}
                   • Avoid answers that others might guess{"\n"}

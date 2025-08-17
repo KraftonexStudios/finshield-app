@@ -1,15 +1,16 @@
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
-import React, { useCallback, useMemo } from 'react';
+import { AlertTriangle, ArrowLeft, BarChart3, ChevronRight, CreditCard, HelpCircle, Lock, Settings, Upload } from 'lucide-react-native';
+import React, { useCallback } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, Share, Text, View } from 'react-native';
 
 export default function ProfileScreen() {
   const { user, logout } = useUserStore();
 
 
-  const hasValidUserData = useMemo(() => {
-    return !!(user?.fullName && user?.mobile);
-  }, [user?.fullName, user?.mobile]);
+  // const hasValidUserData = useMemo(() => {
+  //   return !!(user?.fullName && user?.mobile);
+  // }, [user?.fullName, user?.mobile]);
 
   const handleShareProfile = useCallback(async () => {
     if (!user?.fullName || !user?.mobile) return;
@@ -45,11 +46,11 @@ export default function ProfileScreen() {
       <View className="px-6 py-4 border-b border-gray-800">
         <View className="flex-row items-center justify-between">
           <Pressable onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
-            <Text className="text-white text-xl">←</Text>
+            <ArrowLeft size={24} color="white" />
           </Pressable>
           <Text className="text-white text-lg font-bold">Profile</Text>
           <Pressable onPress={handleShareProfile} className="w-10 h-10 items-center justify-center">
-            <Text className="text-white text-xl">📤</Text>
+            <Upload size={24} color="white" />
           </Pressable>
         </View>
       </View>
@@ -65,13 +66,13 @@ export default function ProfileScreen() {
           <Text className="text-white text-xl font-bold mb-2">
             {user?.fullName || 'User'}
             {!user?.fullName && (
-              <Text className="text-red-400 text-xs ml-2">⚠️</Text>
+              <AlertTriangle size={12} color="#f87171" style={{ marginLeft: 8 }} />
             )}
           </Text>
           <Text className="text-gray-300 text-base mb-1">
             {user?.mobile || 'N/A'}
             {!user?.mobile && (
-              <Text className="text-red-400 text-xs ml-2">⚠️</Text>
+              <AlertTriangle size={12} color="#f87171" style={{ marginLeft: 8 }} />
             )}
           </Text>
           <Text className={`text-sm ${user?.balance && user.balance > 1000 ? 'text-green-400' :
@@ -80,9 +81,12 @@ export default function ProfileScreen() {
             Balance: ₹{user?.balance?.toFixed(2) || '0.00'}
           </Text>
           {(!user?.fullName || !user?.mobile) && (
-            <Text className="text-red-400 text-xs mt-2 text-center">
-              ⚠️ Complete profile required for QR payments
-            </Text>
+            <View className="flex-row items-center mt-2">
+              <AlertTriangle size={12} color="#f87171" />
+              <Text className="text-red-400 text-xs ml-1 text-center">
+                Complete profile required for QR payments
+              </Text>
+            </View>
           )}
         </View>
 
@@ -91,7 +95,7 @@ export default function ProfileScreen() {
           <Text className="text-white text-lg font-bold mb-4">Share Payment Details</Text>
           <View className="items-center py-4">
             <View className="w-16 h-16 bg-purple-600 rounded-full items-center justify-center mb-4">
-              <Text className="text-white text-2xl">📤</Text>
+              <Upload size={32} color="white" />
             </View>
             <Text className="text-white font-medium text-center mb-2">
               Share Your Payment Information
@@ -109,16 +113,17 @@ export default function ProfileScreen() {
         </View>
 
         {/* Profile Actions */}
-        <View className="space-y-3 mb-6">
+        <View className=" flex flex-col gap-2 justify-center  mb-6">
+
           <Pressable
             onPress={() => router.push('/(app)/my-card')}
             className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between"
           >
             <View className="flex-row items-center">
-              <Text className="text-white text-xl mr-4">💳</Text>
+              <CreditCard size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">My Cards</Text>
             </View>
-            <Text className="text-gray-400">→</Text>
+            <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
           <Pressable
@@ -126,34 +131,34 @@ export default function ProfileScreen() {
             className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between"
           >
             <View className="flex-row items-center">
-              <Text className="text-white text-xl mr-4">📊</Text>
+              <BarChart3 size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Transaction History</Text>
             </View>
-            <Text className="text-gray-400">→</Text>
+            <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
           <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Text className="text-white text-xl mr-4">⚙️</Text>
+              <Settings size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Settings</Text>
             </View>
-            <Text className="text-gray-400">→</Text>
+            <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
           <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Text className="text-white text-xl mr-4">🔒</Text>
+              <Lock size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Security</Text>
             </View>
-            <Text className="text-gray-400">→</Text>
+            <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
           <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
-              <Text className="text-white text-xl mr-4">❓</Text>
+              <HelpCircle size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Help & Support</Text>
             </View>
-            <Text className="text-gray-400">→</Text>
+            <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
         </View>
 

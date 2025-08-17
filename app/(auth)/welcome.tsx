@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, SafeAreaView } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { User } from 'lucide-react-native';
 
 export default function WelcomeScreen() {
   const handleContinue = () => {
@@ -18,11 +19,11 @@ export default function WelcomeScreen() {
             className="w-24 h-24 rounded-full items-center justify-center"
           >
             <View className="w-16 h-16 bg-black rounded-full items-center justify-center">
-              <Text className="text-green-400 text-2xl">👤</Text>
+              <User size={32} color="#4ade80" />
             </View>
           </LinearGradient>
         </View>
-        
+
         {/* Welcome Text */}
         <View className="mb-12 items-center">
           <Text className="text-white text-4xl font-bold mb-4 text-center">
@@ -35,7 +36,7 @@ export default function WelcomeScreen() {
             Get real-time updates and secure access to your financial data
           </Text>
         </View>
-        
+
         {/* Continue Button */}
         <View className="absolute bottom-20 left-6 right-6">
           <Pressable
@@ -49,7 +50,7 @@ export default function WelcomeScreen() {
               CONTINUE
             </Text>
           </Pressable>
-          
+
           <Pressable className="mt-4 py-4">
             <Text className="text-gray-400 text-center text-base">
               SKIP FOR NOW

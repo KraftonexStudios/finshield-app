@@ -25,7 +25,7 @@ export default function TransactionsScreen() {
   });
 
   const groupedTransactions = filteredTransactions.reduce((groups, transaction) => {
-    const date = new Date(transaction.date).toDateString();
+    const date = new Date(transaction.createdAt?.toDate?.() || transaction.createdAt).toDateString();
     if (!groups[date]) {
       groups[date] = [];
     }
@@ -119,11 +119,9 @@ export default function TransactionsScreen() {
                   >
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-center flex-1">
-                        <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${
-                          transaction.type === 'credit' ? 'bg-green-500/20' : 'bg-red-500/20'
+                        <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${transaction.type === 'credit' ? 'bg-green-500/20' : 'bg-red-500/20'
                           }`}>
-                          <Text className={`text-xl ${
-                            transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
+                          <Text className={`text-xl ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
                             }`}>
                             {transaction.type === 'credit' ? '↓' : '↑'}
                           </Text>
@@ -133,7 +131,7 @@ export default function TransactionsScreen() {
                             {transaction.description}
                           </Text>
                           <Text className="text-gray-400 text-sm">
-                            {new Date(transaction.date).toLocaleTimeString('en-US', {
+                            {new Date(transaction.createdAt?.toDate?.() || transaction.createdAt).toLocaleTimeString('en-US', {
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
@@ -141,16 +139,15 @@ export default function TransactionsScreen() {
                         </View>
                       </View>
                       <View className="items-end">
-                        <Text className={`font-bold text-base ${
-                          transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
+                        <Text className={`font-bold text-base ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
                           }`}>
                           {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount}
                         </Text>
                         <View className={`px-2 py-1 rounded-full ${transaction.status === 'completed' ? 'bg-green-500/20' :
-                            transaction.status === 'pending' ? 'bg-yellow-500/20' : 'bg-red-500/20'
+                          transaction.status === 'pending' ? 'bg-yellow-500/20' : 'bg-red-500/20'
                           }`}>
                           <Text className={`text-xs font-medium capitalize ${transaction.status === 'completed' ? 'text-green-400' :
-                              transaction.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
+                            transaction.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
                             }`}>
                             {transaction.status}
                           </Text>

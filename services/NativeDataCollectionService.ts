@@ -30,8 +30,12 @@ export interface TouchEventData {
 
 export interface KeystrokeEventData {
   timestamp: number;
-  key: string;
-  inputType: string;
+  character: string;
+  dwellTime: number;
+  flightTime: number;
+  coordinate_x: number;
+  coordinate_y: number;
+  pressure?: number;
 }
 
 class NativeDataCollectionService {
@@ -46,7 +50,9 @@ class NativeDataCollectionService {
     try {
       // Check if the native module is available
       if (!DataCollection) {
-        console.warn("Native DataCollection module not available, using web fallback");
+        console.warn(
+          "Native DataCollection module not available, using web fallback"
+        );
         this.isInitialized = true;
         this.sessionActive = true;
         return true;
@@ -57,7 +63,10 @@ class NativeDataCollectionService {
         const permissions = await DataCollection.checkPermissions();
         console.log("Data collection permissions:", permissions);
       } catch (permError) {
-        console.warn("Permission check failed, continuing with web fallback:", permError);
+        console.warn(
+          "Permission check failed, continuing with web fallback:",
+          permError
+        );
       }
 
       // Reset any existing session
@@ -109,7 +118,7 @@ class NativeDataCollectionService {
         // Web fallback
         return {
           timestamp: Date.now(),
-          ...touchData
+          ...touchData,
         };
       }
     } catch (error) {
@@ -117,17 +126,22 @@ class NativeDataCollectionService {
       // Web fallback
       return {
         timestamp: Date.now(),
-        ...touchData
+        ...touchData,
       };
     }
   }
 
   /**
-   * Collect keystroke event using native Kotlin module
+   * Collect keystroke event using native Kotlin module with simplified structure
    */
   async collectKeystroke(keystrokeData: {
-    key: string;
-    inputType: string;
+    character: string;
+    timestamp: number;
+    dwellTime: number;
+    flightTime: number;
+    coordinate_x: number;
+    coordinate_y: number;
+    pressure?: number;
   }): Promise<KeystrokeEventData | null> {
     if (!this.isInitialized || !this.sessionActive) {
       console.warn(
@@ -138,21 +152,35 @@ class NativeDataCollectionService {
 
     try {
       if (DataCollection && DataCollection.collectKeystrokeNative) {
-        const result = await DataCollection.collectKeystrokeNative(keystrokeData);
+        const result =
+          await DataCollection.collectKeystrokeNative(keystrokeData);
         return result as KeystrokeEventData;
       } else {
-        // Web fallback
+        // Web fallback - return simplified structure
         return {
-          timestamp: Date.now(),
-          ...keystrokeData
+          timestamp: keystrokeData.timestamp || Date.now(),
+          character: keystrokeData.character,
+          dwellTime: keystrokeData.dwellTime,
+          flightTime: keystrokeData.flightTime,
+          coordinate_x: keystrokeData.coordinate_x,
+          coordinate_y: keystrokeData.coordinate_y,
+          pressure: keystrokeData.pressure,
         };
       }
     } catch (error) {
-      console.warn("Native keystroke collection failed, using fallback:", error);
-      // Web fallback
+      console.warn(
+        "Native keystroke collection failed, using fallback:",
+        error
+      );
+      // Web fallback - return simplified structure
       return {
-        timestamp: Date.now(),
-        ...keystrokeData
+        timestamp: keystrokeData.timestamp || Date.now(),
+        character: keystrokeData.character,
+        dwellTime: keystrokeData.dwellTime,
+        flightTime: keystrokeData.flightTime,
+        coordinate_x: keystrokeData.coordinate_x,
+        coordinate_y: keystrokeData.coordinate_y,
+        pressure: keystrokeData.pressure,
       };
     }
   }
@@ -178,7 +206,7 @@ class NativeDataCollectionService {
           touchEvents: 0,
           keystrokeEvents: 0,
           sessionStartTime: this.sessionStartTime,
-          lastActivity: now
+          lastActivity: now,
         };
       }
     } catch (error) {
@@ -190,7 +218,7 @@ class NativeDataCollectionService {
         touchEvents: 0,
         keystrokeEvents: 0,
         sessionStartTime: this.sessionStartTime,
-        lastActivity: now
+        lastActivity: now,
       };
     }
   }
@@ -215,14 +243,19 @@ class NativeDataCollectionService {
           hasOverlayPermission: false,
           hasUnknownApps: false,
           accessibilityServices: [],
-          activeInputMethod: 'default',
+          activeInputMethod: "default",
           appUsagePatterns: {},
           hardwareAttestation: true,
           deviceFingerprint: {
-            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-            platform: typeof navigator !== 'undefined' ? navigator.platform : 'web',
-            language: typeof navigator !== 'undefined' ? navigator.language : 'en'
-          }
+            userAgent:
+              typeof navigator !== "undefined"
+                ? navigator.userAgent
+                : "unknown",
+            platform:
+              typeof navigator !== "undefined" ? navigator.platform : "web",
+            language:
+              typeof navigator !== "undefined" ? navigator.language : "en",
+          },
         };
       }
     } catch (error) {
@@ -233,14 +266,17 @@ class NativeDataCollectionService {
         hasOverlayPermission: false,
         hasUnknownApps: false,
         accessibilityServices: [],
-        activeInputMethod: 'default',
+        activeInputMethod: "default",
         appUsagePatterns: {},
         hardwareAttestation: true,
         deviceFingerprint: {
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-          platform: typeof navigator !== 'undefined' ? navigator.platform : 'web',
-          language: typeof navigator !== 'undefined' ? navigator.language : 'en'
-        }
+          userAgent:
+            typeof navigator !== "undefined" ? navigator.userAgent : "unknown",
+          platform:
+            typeof navigator !== "undefined" ? navigator.platform : "web",
+          language:
+            typeof navigator !== "undefined" ? navigator.language : "en",
+        },
       };
     }
   }

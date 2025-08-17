@@ -40,7 +40,7 @@ export default function Index() {
 
       if (storedUserId && storedPin) {
         // User has completed setup before, show login screen
-        router.replace('/(auth)/login-pin');
+        router.replace('/(auth)/pin-auth');
       } else {
         // New user or incomplete setup, start onboarding flow from get-started
         router.replace('/(onboarding)/get-started');

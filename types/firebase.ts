@@ -22,6 +22,39 @@ export interface FirebaseUser {
   }[];
   biometricEnabled: boolean;
   biometricType?: "face" | "fingerprint";
+  securityQuestionsVerified?: boolean;
+  lastSecurityVerification?: string;
+  // Behavior Analysis
+  lastBehaviorAnalysis?: {
+    sessionId: string;
+    userId: string;
+    verificationTimestamp: string;
+    riskAssessment: {
+      verificationMethod: string;
+      verificationSuccess: boolean;
+    };
+    touchPatterns?: {
+      totalTouches: number;
+      averagePressure: number;
+      touchDuration: number;
+    };
+    keystrokePatterns?: {
+      totalKeystrokes: number;
+      averageTypingSpeed: number;
+      keystrokeDynamics?: {
+        key: string;
+        duration: number;
+        pressure: number;
+      }[];
+    };
+    motionPatterns?: {
+      totalMotionEvents: number;
+      deviceOrientation: any;
+    };
+  };
+  behaviorAnalysisHistory?: {
+    [timestamp: string]: any;
+  };
   // Metadata
   createdAt: any;
   updatedAt: any;

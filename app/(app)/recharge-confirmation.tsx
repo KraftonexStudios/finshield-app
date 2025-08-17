@@ -45,15 +45,17 @@ export default function RechargeConfirmationScreen() {
 
       // Process the recharge transaction
       const success = await processTransaction({
-        type: 'recharge',
+        fromMobile: user?.mobile || '',
+        type: 'debit',
         amount: totalAmount,
         description: `${provider} Recharge - ${mobileNumber}`,
-        recipientMobile: mobileNumber,
-        metadata: {
-          provider,
-          planDescription,
-          validity,
-          convenienceFee
+        note: `Plan: ${planDescription}, Validity: ${validity}`,
+        reference: `RCH${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        status: 'pending',
+        category: 'recharge',
+        recipient: {
+          name: provider,
+          mobile: mobileNumber
         }
       });
 
@@ -118,17 +120,17 @@ export default function RechargeConfirmationScreen() {
                   <Text className="text-white/70">Mobile Number</Text>
                   <Text className="text-white font-semibold">{mobileNumber}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Operator</Text>
                   <Text className="text-white font-semibold">{provider}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Recharge Amount</Text>
                   <Text className="text-white font-semibold">{formatCurrency(rechargeAmount)}</Text>
                 </View>
-                
+
                 {planDescription && (
                   <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                     <Text className="text-white/70">Plan Details</Text>
@@ -137,21 +139,21 @@ export default function RechargeConfirmationScreen() {
                     </Text>
                   </View>
                 )}
-                
+
                 {validity && (
                   <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                     <Text className="text-white/70">Validity</Text>
                     <Text className="text-white font-semibold">{validity}</Text>
                   </View>
                 )}
-                
+
                 {convenienceFee > 0 && (
                   <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                     <Text className="text-white/70">Convenience Fee</Text>
                     <Text className="text-white font-semibold">{formatCurrency(convenienceFee)}</Text>
                   </View>
                 )}
-                
+
                 <View className="flex-row justify-between items-center py-3">
                   <Text className="text-white font-semibold text-lg">Total Amount</Text>
                   <Text className="text-white font-bold text-xl">{formatCurrency(totalAmount)}</Text>
@@ -179,9 +181,8 @@ export default function RechargeConfirmationScreen() {
               </View>
               <View className="flex-row justify-between items-center mt-2">
                 <Text className="text-white/70">Balance After Recharge</Text>
-                <Text className={`font-semibold ${
-                  (user?.balance || 0) - totalAmount >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
+                <Text className={`font-semibold ${(user?.balance || 0) - totalAmount >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
                   {formatCurrency((user?.balance || 0) - totalAmount)}
                 </Text>
               </View>
@@ -192,11 +193,10 @@ export default function RechargeConfirmationScreen() {
               <Pressable
                 onPress={handleConfirmRecharge}
                 disabled={isProcessing || totalAmount > (user?.balance || 0)}
-                className={`rounded-2xl py-4 px-6 ${
-                  isProcessing || totalAmount > (user?.balance || 0)
+                className={`rounded-2xl py-4 px-6 ${isProcessing || totalAmount > (user?.balance || 0)
                     ? 'bg-gray-600'
                     : 'bg-purple-600'
-                }`}
+                  }`}
                 style={({ pressed }) => ({
                   opacity: pressed ? 0.8 : 1,
                 })}

@@ -72,16 +72,17 @@ export default function BillConfirmationScreen() {
 
       // Process the bill payment transaction
       const success = await processTransaction({
-        type: 'bill_payment',
+        fromMobile: user?.mobile || '',
+        type: 'debit',
         amount: totalAmount,
         description: `${getCategoryName(category)} Bill - ${provider}`,
-        recipientMobile: billNumber,
-        metadata: {
-          provider,
-          billNumber,
-          customerName,
-          category,
-          convenienceFee
+        note: `Bill Number: ${billNumber}, Customer: ${customerName}`,
+        reference: `BILL${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        status: 'pending',
+        category: 'bill_payment',
+        recipient: {
+          name: provider,
+          mobile: billNumber
         }
       });
 
@@ -146,34 +147,34 @@ export default function BillConfirmationScreen() {
                   <Text className="text-white/70">Provider</Text>
                   <Text className="text-white font-semibold">{provider}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Bill Number</Text>
                   <Text className="text-white font-semibold">{billNumber}</Text>
                 </View>
-                
+
                 {customerName && (
                   <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                     <Text className="text-white/70">Customer Name</Text>
                     <Text className="text-white font-semibold">{customerName}</Text>
                   </View>
                 )}
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Bill Category</Text>
                   <Text className="text-white font-semibold">{getCategoryName(category)}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Bill Amount</Text>
                   <Text className="text-white font-semibold">{formatCurrency(billAmount)}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3 border-b border-white/10">
                   <Text className="text-white/70">Convenience Fee</Text>
                   <Text className="text-white font-semibold">{formatCurrency(convenienceFee)}</Text>
                 </View>
-                
+
                 <View className="flex-row justify-between items-center py-3">
                   <Text className="text-white font-semibold text-lg">Total Amount</Text>
                   <Text className="text-white font-bold text-xl">{formatCurrency(totalAmount)}</Text>
@@ -201,9 +202,8 @@ export default function BillConfirmationScreen() {
               </View>
               <View className="flex-row justify-between items-center mt-2">
                 <Text className="text-white/70">Balance After Payment</Text>
-                <Text className={`font-semibold ${
-                  (user?.balance ?? 0) - totalAmount >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
+                <Text className={`font-semibold ${(user?.balance ?? 0) - totalAmount >= 0 ? 'text-green-400' : 'text-red-400'
+                  }`}>
                   {formatCurrency(Math.max(0, (user?.balance ?? 0) - totalAmount))}
                 </Text>
               </View>
@@ -214,11 +214,10 @@ export default function BillConfirmationScreen() {
               <Pressable
                 onPress={handleConfirmPayment}
                 disabled={isProcessing || totalAmount > (user?.balance ?? 0)}
-                className={`rounded-2xl py-4 px-6 ${
-                    isProcessing || totalAmount > (user?.balance ?? 0)
+                className={`rounded-2xl py-4 px-6 ${isProcessing || totalAmount > (user?.balance ?? 0)
                     ? 'bg-gray-600'
                     : 'bg-purple-600'
-                }`}
+                  }`}
                 style={({ pressed }) => ({
                   opacity: pressed ? 0.8 : 1,
                 })}

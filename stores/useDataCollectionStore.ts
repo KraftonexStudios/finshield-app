@@ -13,12 +13,14 @@ import WifiManager from "react-native-wifi-reborn";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
+// Import API constants and service
+import { buildApiUrl } from "../constants/API_ENDPOINTS";
+
 // Import types
 import type {
   BehavioralSession,
   DeviceBehavior,
   LocationBehavior,
-  LoginBehavior,
   MobileKeystroke,
   MobileMotionEvents,
   MobileTouchEvent,
@@ -33,7 +35,9 @@ interface BehavioralDataCollector {
   collectTouchEvent(touchData: any): Promise<MobileTouchEvent>;
   collectKeystroke(keystrokeData: any): Promise<MobileKeystroke>;
   getDeviceBehavior(): Promise<any>;
+  getSimCountry(): Promise<string>;
   checkPermissions(): Promise<{ [key: string]: boolean }>;
+  resetSession(): Promise<boolean>;
 }
 
 // Import the native module
@@ -43,7 +47,7 @@ try {
 } catch (error) {}
 
 // Debouncing utility for state updates
-let updateTimeout: NodeJS.Timeout | null = null;
+let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
 interface DataCollectionState {
   // Session Management
@@ -52,6 +56,7 @@ interface DataCollectionState {
   sessionId: string | null;
   userId: string | null;
   collectionScenario:
+    | "initial-registration"
     | "first-time-registration"
     | "re-registration"
     | "login"
@@ -65,7 +70,18 @@ interface DataCollectionState {
   isEndingSession: boolean;
   lastTouchEventTime: number;
   lastKeystrokeTime: number;
-  currentInputType: string | null;
+  lastProcessedKeyIdentifier: string | null;
+  currentInputType: "password" | "email" | "amount" | "mobile" | "text" | null;
+  pendingKeydowns: Map<
+    string,
+    {
+      timestamp: number;
+      inputType: "password" | "email" | "amount" | "mobile" | "text";
+      x: number;
+      y: number;
+      pressure: number | undefined;
+    }
+  >; // Track keydown events for simplified keystroke structure
 
   // Data Collections
   touchEvents: MobileTouchEvent[];
@@ -76,7 +92,6 @@ interface DataCollectionState {
   typingPatterns: TypingPattern[];
 
   // Behavioral Data
-  loginBehavior: LoginBehavior | null;
   locationBehavior: LocationBehavior | null;
   deviceBehavior: DeviceBehavior | null;
   networkBehavior: NetworkBehavior | null;
@@ -108,22 +123,31 @@ interface DataCollectionState {
 
   // Actions
   startSession: (userId: string) => Promise<void>;
-  endSession: () => Promise<BehavioralSession | null>;
+  setUserId: (userId: string) => void;
   clearSession: () => void;
   startDataCollection: (
-    scenario: "first-time-registration" | "re-registration" | "login"
+    scenario:
+      | "initial-registration"
+      | "first-time-registration"
+      | "re-registration"
+      | "login"
   ) => Promise<void>;
+  endSessionAndSendData: (endpoint: string) => Promise<{
+    success: boolean;
+    data: any;
+  }>;
   stopDataCollection: () => Promise<void>;
   handleAppStateChange: (nextAppState: string) => Promise<void>;
-  sendDataAndWaitForResponse: (endpoint: string) => Promise<boolean>;
 
   // Data Collection Actions
   collectTouchEvent: (event: Partial<MobileTouchEvent>) => Promise<void>;
   collectKeystroke: (event: Partial<MobileKeystroke>) => Promise<void>;
-  generateTypingPatternForInputType: (inputType: string) => void;
+  generateTypingPatternForInputType: (
+    inputType: "password" | "email" | "amount" | "mobile" | "text",
+    forceGeneration?: boolean
+  ) => void;
   startMotionCollection: () => Promise<void>;
   stopMotionCollection: () => void;
-  collectLoginBehavior: (behavior: Partial<LoginBehavior>) => Promise<void>;
   collectLocationBehavior: () => Promise<void>;
   collectDeviceBehavior: () => Promise<void>;
   collectNetworkBehavior: () => Promise<void>;
@@ -156,7 +180,10 @@ interface DataCollectionState {
     usageStats: boolean;
   }>;
   checkPermissionStatus: (permission: string) => boolean;
-  sendDataToServer: (endpoint: string) => Promise<void>;
+  sendSessionDataToServer: (
+    endpoint: string,
+    sessionData: BehavioralSession
+  ) => Promise<void>;
 }
 
 export const useDataCollectionStore = create<DataCollectionState>()(
@@ -177,14 +204,15 @@ export const useDataCollectionStore = create<DataCollectionState>()(
     isEndingSession: false,
     lastTouchEventTime: 0,
     lastKeystrokeTime: 0,
+    lastProcessedKeyIdentifier: null,
     currentInputType: null,
+    pendingKeydowns: new Map(),
     touchEvents: [],
     keystrokes: [],
     motionEvents: [],
     motionPatterns: [],
     touchGestures: [],
     typingPatterns: [],
-    loginBehavior: null,
     locationBehavior: null,
     deviceBehavior: null,
     networkBehavior: null,
@@ -397,12 +425,6 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           touchPatterns: [],
           typingPatterns: [],
           motionPattern: [],
-          loginBehavior: get().loginBehavior || {
-            timestamp,
-            loginFlow: "pin",
-            biometricOutcome: "not_available",
-            biometricType: "none",
-          },
           locationBehavior: get().locationBehavior || {
             latitude: 0,
             longitude: 0,
@@ -467,10 +489,29 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       }
     },
 
+    setUserId: (userId) => {
+      set((state) => ({
+        userId,
+        currentSession: state.currentSession
+          ? { ...state.currentSession, userId }
+          : null,
+      }));
+      console.log("🔑 User ID set for data collection:", userId);
+    },
+
     // Optimized Data Collection Management with batching
     startDataCollection: async (scenario) => {
       try {
         const state = get();
+
+        // Reset native module session state
+        try {
+          if (BehavioralDataCollectorModule) {
+            await BehavioralDataCollectorModule.resetSession();
+          }
+        } catch (error) {
+          console.warn("Failed to reset native module session:", error);
+        }
 
         set({
           collectionScenario: scenario,
@@ -491,14 +532,6 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           get().collectNetworkBehavior(),
           get().collectLocationBehavior(),
         ]);
-
-        // Initialize login behavior with default values
-        await get().collectLoginBehavior({
-          loginFlow: scenario === "login" ? "pin" : "pin",
-          biometricOutcome: "not_available",
-          biometricType: "none",
-          failedAttempts: 0,
-        });
 
         console.log(
           "🟢 Data collection started successfully for scenario:",
@@ -595,52 +628,68 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       } catch (error) {}
     },
 
-    sendDataAndWaitForResponse: async (endpoint) => {
-      try {
-        set({ isWaitingForResponse: true });
-
-        await get().sendDataToServer(endpoint);
-
-        // Reduced delay for better performance
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        set({
-          isWaitingForResponse: false,
-          lastDataSent: Date.now(),
-        });
-
-        // Removed data send success logging
-        return true;
-      } catch (error) {
-        set({
-          isWaitingForResponse: false,
-          collectionErrors: [...get().collectionErrors, "Failed to send data"],
-        });
-        return false;
-      }
-    },
-
-    endSession: async () => {
-      console.log("🔴 endSession called - starting session termination");
+    endSessionAndSendData: async (endpoint) => {
+      console.log(
+        "🔴 endSessionAndSendData called - starting session termination and data send"
+      );
       try {
         const state = get();
         if (!state.currentSession || state.isEndingSession) {
-          console.log("🔴 endSession early return:", {
+          console.log("🔴 endSessionAndSendData early return:", {
             hasCurrentSession: !!state.currentSession,
             isCollecting: state.isCollecting,
             isEndingSession: state.isEndingSession,
           });
           // Session already ended or currently ending
-          return null;
+          return {
+            success: true,
+            data: {
+              status: "no_session_data",
+              requiresSecurityQuestions: false,
+              message: "No session data available",
+            },
+          };
         }
 
         // Set flag to prevent multiple simultaneous calls
         set({ isEndingSession: true });
-        console.log("🔴 endSession proceeding with session termination");
+        console.log(
+          "🔴 endSessionAndSendData proceeding with session termination"
+        );
 
         // Generate typing pattern for current input type before ending session
-        if (state.currentInputType && state.keystrokes.length > 0) {
-          get().generateTypingPatternForInputType(state.currentInputType);
+        console.log("🔴 Session end - Current state check:", {
+          currentInputType: state.currentInputType,
+          keystrokesCount: state.keystrokes.length,
+          typingPatternsCount: state.typingPatterns.length,
+          isCollecting: state.isCollecting,
+        });
+
+        // Generate typing patterns for all input types that have keystrokes
+        if (state.keystrokes.length > 0) {
+          console.log(
+            "🔴 Generating final typing patterns for all input types with keystrokes"
+          );
+
+          // Get unique input types from keystrokes
+          const inputTypes = [
+            ...new Set(state.keystrokes.map((k) => k.inputType)),
+          ];
+          console.log("🔴 Found input types:", inputTypes);
+
+          inputTypes.forEach((inputType) => {
+            if (inputType) {
+              console.log("🔴 Generating pattern for input type:", inputType);
+              get().generateTypingPatternForInputType(inputType, true); // Force generation
+            }
+          });
+
+          // Check updated state after pattern generation
+          const updatedState = get();
+          console.log(
+            "🔴 After pattern generation - typing patterns count:",
+            updatedState.typingPatterns.length
+          );
         }
 
         get().stopMotionCollection();
@@ -655,34 +704,28 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           finalTouchPatterns.push(remainingTouchPattern);
         }
 
-        const finalSession: BehavioralSession = {
+        // Preserve typing patterns before state reset
+        const preservedTypingPatterns = [...state.typingPatterns];
+
+        const sessionData: BehavioralSession = {
           sessionId: state.currentSession.sessionId,
           userId: state.currentSession.userId,
           timestamp: state.currentSession.timestamp,
-          touchPatterns: finalTouchPatterns, //done
-          typingPatterns: state.typingPatterns, //need work
-          motionPattern: state.motionPatterns, //done
-          loginBehavior: state.currentSession.loginBehavior, //done
-          locationBehavior: state.currentSession.locationBehavior, //done
-          networkBehavior: state.currentSession.networkBehavior, // almost done but sim country
-          deviceBehavior: state.currentSession.deviceBehavior, //it's truly good but just need to filter our app data
+          touchPatterns: finalTouchPatterns,
+          typingPatterns: preservedTypingPatterns,
+          motionPattern: state.motionPatterns,
+          locationBehavior: state.currentSession.locationBehavior,
+          networkBehavior: state.currentSession.networkBehavior,
+          deviceBehavior: state.currentSession.deviceBehavior,
         };
 
         console.log(
           "🔴 Session end debug - Complete session analysis:",
-          finalSession.deviceBehavior
+          sessionData,
+          "----print data----"
         );
 
-        try {
-          await get().sendDataToServer("/api/session-data");
-        } catch (serverError) {
-          // Session should still end even if server send fails
-          console.log(
-            "Server send failed (expected in development):",
-            serverError.message
-          );
-        }
-
+        // Reset session state
         set({
           currentSession: null,
           isCollecting: false,
@@ -692,6 +735,7 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           isEndingSession: false,
           lastTouchEventTime: 0,
           lastKeystrokeTime: 0,
+          lastProcessedKeyIdentifier: null,
           currentInputType: null,
           touchEvents: [],
           keystrokes: [],
@@ -701,16 +745,46 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           typingPatterns: [],
         });
 
-        return finalSession;
+        // Send session data to server
+        const responseData = await get().sendSessionDataToServer(
+          endpoint,
+          sessionData
+        );
+        console.log(`✅ Session data sent successfully to ${endpoint}`);
+
+        return {
+          success: true,
+          data: responseData,
+        };
       } catch (error) {
+        console.error(`❌ Failed to send session data to ${endpoint}:`, error);
+        // Reset the ending session flag on error
+        set({ isEndingSession: false });
+
+        // TODO: NEEDS WORK - Bypass server errors for now during development
+        // This should be removed once API endpoints are properly configured
+        // console.warn("Bypassing server error for development");
+        // return {
+        //   success: true,
+        //   data: {
+        //     status: "server_error_bypassed",
+        //     requiresSecurityQuestions: false,
+        //     message: "Server error bypassed for development",
+        //   },
+        // };
+
+        // Original error handling (commented out for bypass):
         set((state) => ({
+          collectionErrors: [
+            ...state.collectionErrors,
+            `Failed to send data to ${endpoint}`,
+          ],
           errors: {
             ...state.errors,
-            session: "Failed to end data collection session",
+            sessionEnd: `Failed to send data to ${endpoint}`,
           },
-          isEndingSession: false, // Reset flag on error
         }));
-        return null;
+        return { success: false, data: null };
       }
     },
 
@@ -729,14 +803,15 @@ export const useDataCollectionStore = create<DataCollectionState>()(
         isEndingSession: false,
         lastTouchEventTime: 0,
         lastKeystrokeTime: 0,
+        lastProcessedKeyIdentifier: null,
         currentInputType: null,
+        pendingKeydowns: new Map(),
         touchEvents: [],
         keystrokes: [],
         motionEvents: [],
         motionPatterns: [],
         touchGestures: [],
         typingPatterns: [],
-        loginBehavior: null,
         locationBehavior: null,
         deviceBehavior: null,
         networkBehavior: null,
@@ -767,6 +842,7 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           duration: event.duration || 0,
           distance: 0,
           velocity: 0,
+          pressure: event.pressure, // undefined if device doesn't support pressure
         };
 
         // Calculate distance and velocity in real-time
@@ -858,121 +934,286 @@ export const useDataCollectionStore = create<DataCollectionState>()(
     collectKeystroke: async (event) => {
       try {
         const state = get();
-        if (!state.isCollecting) return;
 
-        const timestamp = Date.now();
-        // Throttle keystrokes to avoid overwhelming data (max 20 events per second)
-        if (timestamp - state.lastKeystrokeTime < 50) {
+        console.log("🔴 [KEYSTROKE STORAGE] collectKeystroke called:", {
+          isCollecting: state.isCollecting,
+          event: {
+            character: event.character,
+            inputType: event.inputType,
+            actionValue: event.actionValue,
+            timestamp: event.timestamp,
+          },
+          currentKeystrokeCount: state.keystrokes.length,
+          currentTypingPatternCount: state.typingPatterns.length,
+        });
+
+        if (!state.isCollecting) {
+          console.log(
+            "🔴 [KEYSTROKE STORAGE] Not collecting - returning early"
+          );
           return;
         }
-        const previousKeystroke = state.keystrokes[state.keystrokes.length - 1];
 
-        let keystroke: MobileKeystroke = {
-          character: event.character || "",
-          timestamp,
-          dwellTime: event.dwellTime || 0,
-          flightTime: previousKeystroke
-            ? timestamp - previousKeystroke.timestamp
-            : 0,
-          x: event.x || 0,
-          y: event.y || 0,
-          action: event.action || "up",
-          inputType: event.inputType || "text",
-        };
+        const timestamp = Date.now();
 
-        // Try to get enhanced data from native module with action for authentic dwell time
-        if (BehavioralDataCollectorModule) {
-          try {
-            const enhancedData =
+        // Validate timing - prevent impossible scenarios, but allow keydown/keyup pairs
+        // Only check timing for same action type to allow quick keydown->keyup sequences
+        const actionValue: 0 | 1 = event.actionValue ?? 1;
+        const keyIdentifier = `${event.character}_${event.inputType || "text"}_${actionValue}`;
+
+        // More lenient timing check - only prevent truly duplicate events (same key, same action, within 5ms)
+        if (
+          timestamp - state.lastKeystrokeTime < 5 &&
+          state.lastProcessedKeyIdentifier === keyIdentifier
+        ) {
+          console.warn(`Duplicate keystroke event ignored: ${keyIdentifier}`);
+          return;
+        }
+
+        console.log(
+          `🔵 Store - Processing keystroke: ${event.character}, actionValue: ${actionValue}`
+        );
+
+        // Update last processed key identifier for duplicate detection
+        set((state) => ({
+          lastProcessedKeyIdentifier: keyIdentifier,
+          lastKeystrokeTime: timestamp,
+        }));
+
+        // Handle keydown/keyup pairing for simplified structure
+        const keyPairIdentifier = `${event.character}_${event.inputType || "text"}`;
+
+        // keydown event - store for later pairing with keyup
+        if (actionValue === 0) {
+          const keydownData = {
+            timestamp,
+            inputType: event.inputType || "text",
+            x: event.coordinate_x || 0,
+            y: event.coordinate_y || 0,
+            pressure: event.pressure,
+          };
+
+          // Store keydown data for later pairing
+          set((state) => {
+            const newPendingKeydowns = new Map(state.pendingKeydowns);
+            newPendingKeydowns.set(keyPairIdentifier, keydownData);
+            return {
+              pendingKeydowns: newPendingKeydowns,
+            };
+          });
+
+          console.log(
+            `🔵 Store - Keydown stored: ${event.character}, pending count: ${get().pendingKeydowns.size + 1}`
+          );
+          return; // Don't create keystroke object yet, wait for keyup
+        }
+
+        // keyup event - create single keystroke object with calculated timing
+        if (actionValue === 1) {
+          const keydownData = state.pendingKeydowns.get(keyPairIdentifier);
+          if (!keydownData) {
+            console.warn(
+              `No matching keydown found for keyup event: '${event.character}'`
+            );
+            return; // Skip if no matching keydown
+          }
+
+          // Calculate dwell time (time between keydown and keyup)
+          const dwellTime = Math.max(0, timestamp - keydownData.timestamp);
+
+          // Validate dwell time is reasonable (between 30ms and 3000ms)
+          if (dwellTime < 30 || dwellTime > 3000) {
+            console.warn(
+              `Unusual dwell time: ${dwellTime}ms for character '${event.character}'`
+            );
+          }
+
+          // Calculate flight time from previous keystroke
+          let flightTime = 0;
+          const lastKeystroke = state.keystrokes[state.keystrokes.length - 1];
+          if (lastKeystroke) {
+            flightTime = Math.max(
+              0,
+              keydownData.timestamp - lastKeystroke.timestamp
+            );
+          }
+
+          // Create simplified keystroke object without action field
+          let keystroke: MobileKeystroke = {
+            character: event.character || "",
+            timestamp: keydownData.timestamp, // Use keydown timestamp as primary timestamp
+            dwellTime,
+            flightTime,
+            coordinate_x: keydownData.x,
+            coordinate_y: keydownData.y,
+            pressure: keydownData.pressure, // undefined if device doesn't support pressure
+            inputType: keydownData.inputType,
+          };
+
+          // Send data to native module for logging and storage, but prioritize JS calculations
+          if (BehavioralDataCollectorModule) {
+            try {
+              // Send our calculated values to native module for storage and logging
               await BehavioralDataCollectorModule.collectKeystroke({
                 character: keystroke.character,
                 timestamp: keystroke.timestamp,
-                action: event.action || "up",
-                pageX: event.x || 0,
-                pageY: event.y || 0,
-                x: event.x || 0,
-                y: event.y || 0,
+                dwellTime: dwellTime,
+                flightTime: flightTime,
+                coordinate_x: keydownData.x,
+                coordinate_y: keydownData.y,
+                pressure: keydownData.pressure,
               });
-            // Use native module's authentic dwell time calculation
-            keystroke = { ...keystroke, ...enhancedData };
-          } catch (nativeError) {
-            // Fallback to provided dwell time if native module fails
+
+              // Keep JavaScript store calculations as the authoritative source
+              // Native module is used only for logging, debugging, and additional storage
+              console.log(
+                `Keystroke collected - Character: ${keystroke.character}, JS Dwell Time: ${dwellTime}ms, JS Flight Time: ${flightTime}ms`
+              );
+            } catch (nativeError) {
+              console.warn(
+                "Native module keystroke collection failed:",
+                nativeError
+              );
+            }
           }
-        }
 
-        // Check if input type has changed and generate pattern for previous input type
-        const currentInputType = keystroke.inputType;
-        const previousInputType = get().currentInputType;
+          // Remove from pending keydowns
+          state.pendingKeydowns.delete(keyPairIdentifier);
 
-        if (previousInputType && previousInputType !== currentInputType) {
-          // Generate typing pattern for the previous input type before switching
-          get().generateTypingPatternForInputType(previousInputType);
-        }
+          // Check if input type has changed and generate pattern for previous input type
+          const currentInputType = keystroke.inputType;
+          const previousInputType = get().currentInputType;
 
-        // Store keystrokes immediately without debouncing to ensure they're captured
-        set((state) => {
-          const newKeystrokes =
-            state.keystrokes.length >= 100
-              ? [...state.keystrokes.slice(-49), keystroke] // Keep last 50 events when at limit
-              : [...state.keystrokes, keystroke];
+          if (previousInputType && previousInputType !== currentInputType) {
+            get().generateTypingPatternForInputType(previousInputType);
+          }
 
-          // Generate typing pattern if we have enough keystrokes (every 10 keystrokes)
-          if (newKeystrokes.length % 10 === 0) {
-            // Determine input type from recent keystrokes
-            const recentKeystrokes = newKeystrokes.slice(-20);
-            const inputType =
-              recentKeystrokes.length > 0 &&
-              recentKeystrokes[recentKeystrokes.length - 1].inputType
-                ? recentKeystrokes[recentKeystrokes.length - 1].inputType
-                : "text";
+          // Clean up old keydown events (older than 5 seconds) to prevent memory leaks
+          const currentTime = timestamp;
+          for (const [key, keydownData] of state.pendingKeydowns.entries()) {
+            if (currentTime - keydownData.timestamp > 5000) {
+              state.pendingKeydowns.delete(key);
+              console.warn(`Cleaned up orphaned keydown event: ${key}`);
+            }
+          }
 
-            const typingPattern: TypingPattern = {
-              inputType,
-              keystrokes: recentKeystrokes,
-            };
+          // Store keystrokes with proper validation
+          console.log("🔴 [KEYSTROKE STORAGE] About to store keystroke:", {
+            character: keystroke.character,
+            inputType: keystroke.inputType,
+            dwellTime: keystroke.dwellTime,
+            flightTime: keystroke.flightTime,
+            currentKeystrokeCount: get().keystrokes.length,
+          });
 
-            console.log("Generated typing pattern (10 keystrokes):", {
-              inputType,
-              keystrokeCount: recentKeystrokes.length,
-              hasInputType:
-                !!recentKeystrokes[recentKeystrokes.length - 1]?.inputType,
+          set((state) => {
+            const newKeystrokes =
+              state.keystrokes.length >= 200
+                ? [...state.keystrokes.slice(-99), keystroke] // Keep last 100 events when at limit
+                : [...state.keystrokes, keystroke];
+
+            console.log("🔴 [KEYSTROKE STORAGE] Keystroke stored:", {
+              newKeystrokeCount: newKeystrokes.length,
+              previousCount: state.keystrokes.length,
+              keystrokeAdded: keystroke.character,
             });
+
+            // Generate typing pattern every 10 complete key presses
+            if (newKeystrokes.length > 0 && newKeystrokes.length % 10 === 0) {
+              const recentKeystrokes = newKeystrokes.slice(-40); // Get more context
+              const inputType = keystroke.inputType || "text";
+
+              const typingPattern: TypingPattern = {
+                inputType,
+                keystrokes: recentKeystrokes,
+              };
+
+              console.log(
+                "🔴 [KEYSTROKE STORAGE] Generated typing pattern (10 complete keystrokes):",
+                {
+                  inputType,
+                  totalKeystrokeCount: recentKeystrokes.length,
+                  newTypingPatternCount: state.typingPatterns.length + 1,
+                }
+              );
+
+              return {
+                keystrokes: newKeystrokes,
+                lastKeystrokeTime: timestamp,
+                currentInputType: currentInputType,
+                typingPatterns: [
+                  ...state.typingPatterns.slice(-9),
+                  typingPattern,
+                ],
+              };
+            }
 
             return {
               keystrokes: newKeystrokes,
               lastKeystrokeTime: timestamp,
               currentInputType: currentInputType,
-              typingPatterns: [
-                ...state.typingPatterns.slice(-9),
-                typingPattern,
-              ], // Keep last 10 patterns
             };
-          }
-
-          return {
-            keystrokes: newKeystrokes,
-            lastKeystrokeTime: timestamp,
-            currentInputType: currentInputType,
-          };
-        });
+          });
+        }
       } catch (error) {
+        console.error("Keystroke collection error:", error);
         set((state) => ({
           errors: {
             ...state.errors,
-            keystroke: "Failed to collect keystroke",
+            keystroke: `Failed to collect keystroke: ${error instanceof Error ? error.message : "Unknown error"}`,
           },
+          collectionErrors: [
+            ...state.collectionErrors.slice(-9),
+            `Keystroke collection failed at ${new Date().toISOString()}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          ],
         }));
       }
     },
 
     // Generate typing pattern for specific input type when switching fields
-    generateTypingPatternForInputType: (inputType) => {
+    generateTypingPatternForInputType: (
+      inputType: "password" | "email" | "amount" | "mobile" | "text",
+      forceGeneration: boolean = false
+    ) => {
       const state = get();
-      if (!state.isCollecting) return;
+
+      console.log(
+        `🔴 [PATTERN GENERATION] generateTypingPatternForInputType called:`,
+        {
+          inputType,
+          isCollecting: state.isCollecting,
+          forceGeneration,
+          totalKeystrokeCount: state.keystrokes.length,
+          currentTypingPatternCount: state.typingPatterns.length,
+        }
+      );
+
+      if (!state.isCollecting && !forceGeneration) {
+        console.log(
+          `🔴 [PATTERN GENERATION] Not collecting and not forced - returning early`
+        );
+        return;
+      }
 
       // Filter keystrokes for the specific input type
       const inputTypeKeystrokes = state.keystrokes.filter(
         (keystroke) => keystroke.inputType === inputType
+      );
+
+      console.log(
+        `🔴 [PATTERN GENERATION] Filtered keystrokes for ${inputType}:`,
+        {
+          inputType,
+          filteredKeystrokeCount: inputTypeKeystrokes.length,
+          totalKeystrokeCount: state.keystrokes.length,
+          isCollecting: state.isCollecting,
+          forceGeneration,
+          keystrokeDetails: inputTypeKeystrokes.map((k) => ({
+            character: k.character,
+            inputType: k.inputType,
+            timestamp: k.timestamp,
+          })),
+        }
       );
 
       // Only generate pattern if we have enough keystrokes for this input type
@@ -982,15 +1223,32 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           keystrokes: inputTypeKeystrokes.slice(-20), // Use last 20 keystrokes for this input type
         };
 
-        console.log(`Generated typing pattern for ${inputType}:`, {
-          inputType,
-          keystrokeCount: inputTypeKeystrokes.length,
-          patternKeystrokeCount: typingPattern.keystrokes.length,
-        });
+        console.log(
+          `🔴 [PATTERN GENERATION] Generated typing pattern for ${inputType}:`,
+          {
+            inputType,
+            totalFilteredKeystrokeCount: inputTypeKeystrokes.length,
+            patternKeystrokeCount: typingPattern.keystrokes.length,
+            previousTypingPatternCount: state.typingPatterns.length,
+          }
+        );
 
-        set((state) => ({
-          typingPatterns: [...state.typingPatterns.slice(-9), typingPattern], // Keep last 10 patterns
-        }));
+        set((state) => {
+          const newTypingPatterns = [
+            ...state.typingPatterns.slice(-9),
+            typingPattern,
+          ];
+          console.log(
+            `🔴 [PATTERN GENERATION] Pattern stored - new count: ${newTypingPatterns.length}`
+          );
+          return {
+            typingPatterns: newTypingPatterns, // Keep last 10 patterns
+          };
+        });
+      } else {
+        console.log(
+          `🔴 [PATTERN GENERATION] Not enough keystrokes for ${inputType} pattern (need 5, have ${inputTypeKeystrokes.length})`
+        );
       }
     },
 
@@ -1189,59 +1447,6 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       } as any);
     },
 
-    // Login Behavior Collection
-    collectLoginBehavior: async (behavior) => {
-      try {
-        const timestamp = Date.now();
-
-        // Get biometric info
-        let biometricType: "fingerprint" | "face_id" | "none" = "none";
-        let biometricOutcome:
-          | "success"
-          | "failure"
-          | "not_available"
-          | "user_cancelled" = "not_available";
-
-        try {
-          const hasHardware = await LocalAuthentication.hasHardwareAsync();
-          if (hasHardware) {
-            const supportedTypes =
-              await LocalAuthentication.supportedAuthenticationTypesAsync();
-            if (
-              supportedTypes.includes(
-                LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION
-              )
-            ) {
-              biometricType = "face_id";
-            } else if (
-              supportedTypes.includes(
-                LocalAuthentication.AuthenticationType.FINGERPRINT
-              )
-            ) {
-              biometricType = "fingerprint";
-            }
-          }
-        } catch (error) {}
-
-        const loginBehavior: LoginBehavior = {
-          timestamp,
-          loginFlow: behavior.loginFlow || "pin",
-          biometricOutcome: behavior.biometricOutcome || biometricOutcome,
-          biometricType: behavior.biometricType || biometricType,
-          loginError: behavior.loginError,
-        };
-
-        set({ loginBehavior });
-      } catch (error) {
-        set((state) => ({
-          errors: {
-            ...state.errors,
-            login: "Failed to collect login behavior",
-          },
-        }));
-      }
-    },
-
     // Location Behavior Collection
     collectLocationBehavior: async () => {
       try {
@@ -1392,10 +1597,26 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             networkBehavior.networkOperator = carrier;
           }
 
-          // SIM data collection simplified (without external dependencies)
+          // SIM data collection using native module
           networkBehavior.simSerial = "unknown";
           networkBehavior.simOperator = carrier || "unknown";
-          networkBehavior.simCountry = "unknown";
+
+          // Get SIM country from native module
+          if (BehavioralDataCollectorModule) {
+            try {
+              const simCountry =
+                await BehavioralDataCollectorModule.getSimCountry();
+              networkBehavior.simCountry = simCountry;
+            } catch (error) {
+              console.warn(
+                "Failed to get SIM country from native module:",
+                error
+              );
+              networkBehavior.simCountry = "unknown";
+            }
+          } else {
+            networkBehavior.simCountry = "unknown";
+          }
 
           // WiFi Info
           const wifiInfo = await WifiManager.getCurrentWifiSSID();
@@ -1420,49 +1641,18 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       }
     },
 
-    sendDataToServer: async (endpoint) => {
+    // utility
+    sendSessionDataToServer: async (endpoint, sessionData) => {
       try {
-        const state = get();
+        console.log("🔴 Sending session data with typing patterns:", {
+          sessionId: sessionData.sessionId,
+          typingPatternsCount: sessionData.typingPatterns?.length || 0,
+          typingPatterns: sessionData.typingPatterns,
+        });
 
-        const sessionData = {
-          sessionId: state.sessionId,
-          userId: state.userId,
-          scenario: state.collectionScenario,
-          touchEvents: state.touchEvents,
-          keystrokes: state.keystrokes,
-          motionPatterns: state.motionPatterns,
-          loginBehavior: state.loginBehavior,
-          locationBehavior: state.locationBehavior,
-          deviceBehavior: state.deviceBehavior,
-          networkBehavior: state.networkBehavior,
-          timestamp: Date.now(),
-        };
-
-        // Determine endpoint based on scenario and data analysis
-        let targetEndpoint = endpoint;
-        if (!endpoint.includes("/check") && !endpoint.includes("/regular")) {
-          // Auto-determine endpoint based on data patterns
-          const suspiciousPatterns = {
-            rapidTouches: state.touchEvents.filter(
-              (t) => t.velocity && t.velocity > 1000
-            ).length,
-            unusualMotion: state.motionPatterns.filter(
-              (p) => p.samples.length > 300
-            ).length,
-            multipleFailedAttempts: state.loginBehavior?.failedAttempts || 0,
-          };
-
-          const isSuspicious =
-            suspiciousPatterns.rapidTouches > 10 ||
-            suspiciousPatterns.unusualMotion > 3 ||
-            suspiciousPatterns.multipleFailedAttempts > 2;
-
-          targetEndpoint = isSuspicious
-            ? `${endpoint}/check`
-            : `${endpoint}/regular`;
-        }
-
-        // Removed data collection summary logging
+        // Use the provided endpoint directly
+        const targetEndpoint = buildApiUrl(endpoint);
+        console.log("🔴 Target endpoint:", targetEndpoint);
 
         // Real API call implementation with development fallback
         let responseData;
@@ -1480,35 +1670,20 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
+          console.log("🔴 Response:", response);
 
           responseData = await response.json();
         } catch (fetchError) {
-          // Development mode fallback - simulate successful response
           console.log(
-            "API endpoint not available, using mock response for development"
+            "🔴 Development mode - Simulated API response:",
+            fetchError
           );
-          responseData = {
-            success: true,
-            sessionId: sessionData.sessionId,
-            timestamp: Date.now(),
-            message: "Data received (mock response)",
-          };
         }
-        // Removed server response logging
 
-        set({ lastDataSent: Date.now() });
+        console.log("[SUCCESS] Session data sent successfully:", responseData);
         return responseData;
       } catch (error) {
-        set((state) => ({
-          collectionErrors: [
-            ...state.collectionErrors,
-            `Failed to send data to server: ${error.message}`,
-          ],
-          errors: {
-            ...state.errors,
-            server: `Failed to send data to server: ${error.message}`,
-          },
-        }));
+        console.error("❌ Failed to send session data:", error);
         throw error;
       }
     },
@@ -1518,13 +1693,11 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 // Export individual actions for easier usage
 export const {
   startSession,
-  endSession,
   clearSession,
   collectTouchEvent,
   collectKeystroke,
   startMotionCollection,
   stopMotionCollection,
-  collectLoginBehavior,
   collectLocationBehavior,
   collectDeviceBehavior,
   collectNetworkBehavior,

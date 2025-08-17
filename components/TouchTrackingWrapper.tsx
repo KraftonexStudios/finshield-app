@@ -19,7 +19,9 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
     moveCount: 0,
     totalDistance: 0,
     isScrolling: false,
-    isPinching: false
+    isPinching: false,
+    startPressure: undefined as number | undefined,
+    endPressure: undefined as number | undefined
   });
 
   const handleTouchStart = async (event: GestureResponderEvent) => {
@@ -34,7 +36,9 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
       moveCount: 0,
       totalDistance: 0,
       isScrolling: false,
-      isPinching: touches && touches.length > 1
+      isPinching: touches && touches.length > 1,
+      startPressure: force,
+      endPressure: undefined
     };
 
     // Store touch start data for later use
@@ -81,7 +85,7 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
   const handleTouchEnd = async (event: GestureResponderEvent) => {
     if (!touchData.current.startTime) return;
 
-    const { pageX, pageY } = event.nativeEvent;
+    const { pageX, pageY, force } = event.nativeEvent;
     const touchEndTime = Date.now();
     const duration = touchEndTime - touchData.current.startTime;
 
@@ -90,6 +94,15 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
     const deltaY = pageY - touchData.current.startY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
     const velocity = duration > 0 ? distance / duration : 0;
+
+    // Handle end pressure with same fallback logic
+    let endPressureValue: number | undefined;
+    if (force !== undefined && force !== null && force > 0) {
+      endPressureValue = force;
+    } else {
+      endPressureValue = undefined;
+    }
+    touchData.current.endPressure = endPressureValue;
 
     // Log basic touch end information for debugging
     console.log('Touch end analysis:', {
@@ -102,7 +115,7 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
     try {
       // Determine gesture type based on touch behavior
       let gestureType: "tap" | "swipe" | "scroll" | "pinch" | "long_press" = "tap";
-      
+
       if (touchData.current.isPinching) {
         gestureType = "pinch";
       } else if (duration > 500) {
@@ -111,6 +124,18 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
         gestureType = "scroll";
       } else if (distance > 20) {
         gestureType = "swipe";
+      }
+
+      // Use average pressure if both start and end are available, otherwise use whichever is available
+      let averagePressure: number | undefined;
+      if (touchData.current.startPressure !== undefined && touchData.current.endPressure !== undefined) {
+        averagePressure = (touchData.current.startPressure + touchData.current.endPressure) / 2;
+      } else if (touchData.current.startPressure !== undefined) {
+        averagePressure = touchData.current.startPressure;
+      } else if (touchData.current.endPressure !== undefined) {
+        averagePressure = touchData.current.endPressure;
+      } else {
+        averagePressure = undefined; // Device doesn't support pressure
       }
 
       // Call the store's collectTouchEvent to generate patterns
@@ -122,7 +147,8 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
         endY: pageY,
         duration,
         distance,
-        velocity
+        velocity,
+        pressure: averagePressure
       });
 
       console.log('Touch end collected, duration:', duration + 'ms');
@@ -139,7 +165,9 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
       moveCount: 0,
       totalDistance: 0,
       isScrolling: false,
-      isPinching: false
+      isPinching: false,
+      startPressure: undefined,
+      endPressure: undefined
     };
   };
 

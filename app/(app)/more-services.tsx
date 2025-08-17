@@ -1,6 +1,33 @@
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import {
+  ArrowLeft,
+  Award,
+  BarChart3,
+  Building2,
+  Calculator,
+  Car,
+  ChevronRight,
+  Clipboard,
+  CreditCard,
+  DollarSign,
+  FileCheck,
+  FileText,
+  Gem,
+  Globe,
+  HelpCircle,
+  Hospital,
+  MessageCircle, Phone,
+  Plane,
+  Receipt, RotateCcw,
+  Send,
+  Shield,
+  Smartphone,
+  TrafficCone,
+  TrendingUp,
+  Users
+} from 'lucide-react-native';
 import React from 'react';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -8,7 +35,7 @@ interface Service {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: React.ComponentType<any>;
   color: string;
   route?: string;
   comingSoon?: boolean;
@@ -22,7 +49,7 @@ export default function MoreServicesScreen() {
       id: 'beneficiary',
       title: 'Manage Beneficiaries',
       description: 'Add, edit or remove beneficiaries',
-      icon: '👥',
+      icon: Users,
       color: 'bg-blue-500',
       route: '/(app)/beneficiary-list'
     },
@@ -30,7 +57,7 @@ export default function MoreServicesScreen() {
       id: 'statements',
       title: 'Account Statements',
       description: 'Download monthly statements',
-      icon: '📄',
+      icon: FileText,
       color: 'bg-green-500',
       comingSoon: true
     },
@@ -38,7 +65,7 @@ export default function MoreServicesScreen() {
       id: 'cheque',
       title: 'Cheque Book Request',
       description: 'Request new cheque book',
-      icon: '📋',
+      icon: Clipboard,
       color: 'bg-purple-500',
       comingSoon: true
     },
@@ -46,7 +73,7 @@ export default function MoreServicesScreen() {
       id: 'fd',
       title: 'Fixed Deposits',
       description: 'Create and manage FDs',
-      icon: '🏦',
+      icon: Building2,
       color: 'bg-orange-500',
       comingSoon: true
     }
@@ -57,7 +84,7 @@ export default function MoreServicesScreen() {
       id: 'qr_pay',
       title: 'QR Code Payment',
       description: 'Scan and pay with QR codes',
-      icon: '📱',
+      icon: Smartphone,
       color: 'bg-indigo-500',
       comingSoon: true
     },
@@ -65,7 +92,7 @@ export default function MoreServicesScreen() {
       id: 'split_bill',
       title: 'Split Bills',
       description: 'Split expenses with friends',
-      icon: '🧾',
+      icon: Receipt,
       color: 'bg-pink-500',
       comingSoon: true
     },
@@ -73,7 +100,7 @@ export default function MoreServicesScreen() {
       id: 'recurring',
       title: 'Recurring Payments',
       description: 'Set up automatic payments',
-      icon: '🔄',
+      icon: RotateCcw,
       color: 'bg-teal-500',
       comingSoon: true
     },
@@ -81,7 +108,7 @@ export default function MoreServicesScreen() {
       id: 'international',
       title: 'International Transfer',
       description: 'Send money abroad',
-      icon: '🌍',
+      icon: Globe,
       color: 'bg-cyan-500',
       comingSoon: true
     }
@@ -92,7 +119,7 @@ export default function MoreServicesScreen() {
       id: 'mutual_funds',
       title: 'Mutual Funds',
       description: 'Invest in mutual funds',
-      icon: '📈',
+      icon: TrendingUp,
       color: 'bg-emerald-500',
       comingSoon: true
     },
@@ -100,7 +127,7 @@ export default function MoreServicesScreen() {
       id: 'stocks',
       title: 'Stock Trading',
       description: 'Buy and sell stocks',
-      icon: '📊',
+      icon: BarChart3,
       color: 'bg-red-500',
       comingSoon: true
     },
@@ -108,7 +135,7 @@ export default function MoreServicesScreen() {
       id: 'gold',
       title: 'Digital Gold',
       description: 'Buy and sell digital gold',
-      icon: '🥇',
+      icon: Award,
       color: 'bg-yellow-500',
       comingSoon: true
     },
@@ -116,7 +143,7 @@ export default function MoreServicesScreen() {
       id: 'sip',
       title: 'SIP Calculator',
       description: 'Calculate SIP returns',
-      icon: '🧮',
+      icon: Calculator,
       color: 'bg-violet-500',
       comingSoon: true
     }
@@ -127,7 +154,7 @@ export default function MoreServicesScreen() {
       id: 'life_insurance',
       title: 'Life Insurance',
       description: 'Protect your family',
-      icon: '🛡️',
+      icon: Shield,
       color: 'bg-blue-600',
       comingSoon: true
     },
@@ -135,7 +162,7 @@ export default function MoreServicesScreen() {
       id: 'health_insurance',
       title: 'Health Insurance',
       description: 'Medical coverage plans',
-      icon: '🏥',
+      icon: Hospital,
       color: 'bg-red-600',
       comingSoon: true
     },
@@ -143,7 +170,7 @@ export default function MoreServicesScreen() {
       id: 'vehicle_insurance',
       title: 'Vehicle Insurance',
       description: 'Car and bike insurance',
-      icon: '🚗',
+      icon: Car,
       color: 'bg-gray-600',
       comingSoon: true
     },
@@ -151,7 +178,7 @@ export default function MoreServicesScreen() {
       id: 'travel_insurance',
       title: 'Travel Insurance',
       description: 'Safe travel coverage',
-      icon: '✈️',
+      icon: Plane,
       color: 'bg-sky-500',
       comingSoon: true
     }
@@ -162,7 +189,7 @@ export default function MoreServicesScreen() {
       id: 'loan_emi',
       title: 'Loan EMI',
       description: 'Pay loan installments',
-      icon: '💳',
+      icon: CreditCard,
       color: 'bg-amber-500',
       comingSoon: true
     },
@@ -170,7 +197,7 @@ export default function MoreServicesScreen() {
       id: 'credit_card',
       title: 'Credit Card Bills',
       description: 'Pay credit card dues',
-      icon: '💎',
+      icon: Gem,
       color: 'bg-slate-500',
       comingSoon: true
     },
@@ -178,7 +205,7 @@ export default function MoreServicesScreen() {
       id: 'tax_payment',
       title: 'Tax Payments',
       description: 'Pay income tax online',
-      icon: '📋',
+      icon: FileCheck,
       color: 'bg-lime-500',
       comingSoon: true
     },
@@ -186,7 +213,7 @@ export default function MoreServicesScreen() {
       id: 'challan',
       title: 'Traffic Challan',
       description: 'Pay traffic fines',
-      icon: '🚦',
+      icon: TrafficCone,
       color: 'bg-rose-500',
       comingSoon: true
     }
@@ -222,7 +249,7 @@ export default function MoreServicesScreen() {
               </View>
             )}
             <View className={`w-12 h-12 ${service.color} rounded-full items-center justify-center mb-3`}>
-              <Text className="text-white text-xl">{service.icon}</Text>
+              <service.icon size={24} color="white" />
             </View>
             <Text className="text-white font-semibold mb-1" numberOfLines={1}>
               {service.title}
@@ -250,7 +277,7 @@ export default function MoreServicesScreen() {
                 onPress={() => router.back()}
                 className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mr-4"
               >
-                <Text className="text-white text-xl">←</Text>
+                <ArrowLeft size={24} color="white" />
               </Pressable>
               <Text className="text-2xl font-bold text-white">More Services</Text>
             </View>
@@ -276,7 +303,7 @@ export default function MoreServicesScreen() {
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Text className="text-white text-2xl mb-2">💸</Text>
+                  <Send size={32} color="white" />
                   <Text className="text-white font-medium text-center">Send Money</Text>
                 </Pressable>
 
@@ -287,7 +314,7 @@ export default function MoreServicesScreen() {
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Text className="text-white text-2xl mb-2">💰</Text>
+                  <DollarSign size={32} color="white" />
                   <Text className="text-white font-medium text-center">Request Money</Text>
                 </Pressable>
 
@@ -298,7 +325,7 @@ export default function MoreServicesScreen() {
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Text className="text-white text-2xl mb-2">📊</Text>
+                  <BarChart3 size={32} color="white" />
                   <Text className="text-white font-medium text-center">Transactions</Text>
                 </Pressable>
               </View>
@@ -322,13 +349,13 @@ export default function MoreServicesScreen() {
                   })}
                 >
                   <View className="w-10 h-10 bg-green-500 rounded-full items-center justify-center mr-3">
-                    <Text className="text-white text-lg">💬</Text>
+                    <MessageCircle size={20} color="white" />
                   </View>
                   <View className="flex-1">
                     <Text className="text-white font-medium">Live Chat Support</Text>
                     <Text className="text-white/60 text-sm">Get instant help from our team</Text>
                   </View>
-                  <Text className="text-white/40 text-xl">›</Text>
+                  <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
                 </Pressable>
 
                 <Pressable
@@ -338,13 +365,13 @@ export default function MoreServicesScreen() {
                   })}
                 >
                   <View className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center mr-3">
-                    <Text className="text-white text-lg">📞</Text>
+                    <Phone size={20} color="white" />
                   </View>
                   <View className="flex-1">
                     <Text className="text-white font-medium">Call Support</Text>
                     <Text className="text-white/60 text-sm">1800-XXX-XXXX (Toll Free)</Text>
                   </View>
-                  <Text className="text-white/40 text-xl">›</Text>
+                  <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
                 </Pressable>
 
                 <Pressable
@@ -354,13 +381,13 @@ export default function MoreServicesScreen() {
                   })}
                 >
                   <View className="w-10 h-10 bg-purple-500 rounded-full items-center justify-center mr-3">
-                    <Text className="text-white text-lg">❓</Text>
+                    <HelpCircle size={20} color="white" />
                   </View>
                   <View className="flex-1">
                     <Text className="text-white font-medium">FAQ</Text>
                     <Text className="text-white/60 text-sm">Find answers to common questions</Text>
                   </View>
-                  <Text className="text-white/40 text-xl">›</Text>
+                  <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
                 </Pressable>
               </View>
             </View>

@@ -1,12 +1,12 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { NativeModule, requireNativeModule } from "expo";
 
-import { DataCollectionModuleEvents } from './DataCollection.types';
+import { DataCollectionModuleEvents } from "./DataCollection.types";
 
 declare class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
   PI: number;
   hello(): string;
   setValueAsync(value: string): Promise<void>;
-  
+
   // Data collection methods
   checkPermissions(): Promise<Record<string, boolean>>;
   collectTouchEventNative(touchData: {
@@ -24,12 +24,21 @@ declare class DataCollectionModule extends NativeModule<DataCollectionModuleEven
     action: number;
   }>;
   collectKeystrokeNative(keystrokeData: {
-    key: string;
-    inputType: string;
-  }): Promise<{
+    character: string;
     timestamp: number;
-    key: string;
-    inputType: string;
+    dwellTime: number;
+    flightTime: number;
+    coordinate_x: number;
+    coordinate_y: number;
+    pressure?: number;
+  }): Promise<{
+    character: string;
+    timestamp: number;
+    dwellTime: number;
+    flightTime: number;
+    coordinate_x: number;
+    coordinate_y: number;
+    pressure?: number;
   }>;
   getSessionAnalytics(): Promise<{
     sessionDuration: number;
@@ -48,8 +57,9 @@ declare class DataCollectionModule extends NativeModule<DataCollectionModuleEven
     hardwareAttestation: boolean;
     deviceFingerprint: Record<string, string>;
   }>;
+  getSimCountry(): Promise<string>;
   resetSession(): Promise<void>;
 }
 
 // This call loads the native module object from the JSI.
-export default requireNativeModule<DataCollectionModule>('DataCollection');
+export default requireNativeModule<DataCollectionModule>("DataCollection");

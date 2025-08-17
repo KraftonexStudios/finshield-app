@@ -3,6 +3,7 @@ import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { ArrowLeft, ChevronRight, Droplets, Flame, Globe, Smartphone, Tv, Zap } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -10,14 +11,14 @@ interface BillProvider {
   id: string;
   name: string;
   category: string;
-  icon: string;
+  icon: React.ComponentType<any>;
   color: string;
 }
 
 interface BillCategory {
   id: string;
   name: string;
-  icon: string;
+  icon: React.ComponentType<any>;
   providers: BillProvider[];
 }
 
@@ -50,62 +51,62 @@ export default function BillPaymentScreen() {
     {
       id: 'electricity',
       name: 'Electricity',
-      icon: '⚡',
+      icon: Zap,
       providers: [
-        { id: 'mseb', name: 'MSEB', category: 'electricity', icon: '⚡', color: 'bg-yellow-500' },
-        { id: 'bses', name: 'BSES', category: 'electricity', icon: '⚡', color: 'bg-yellow-500' },
-        { id: 'tata_power', name: 'Tata Power', category: 'electricity', icon: '⚡', color: 'bg-yellow-500' },
+        { id: 'mseb', name: 'MSEB', category: 'electricity', icon: Zap, color: 'bg-yellow-500' },
+        { id: 'bses', name: 'BSES', category: 'electricity', icon: Zap, color: 'bg-yellow-500' },
+        { id: 'tata_power', name: 'Tata Power', category: 'electricity', icon: Zap, color: 'bg-yellow-500' },
       ]
     },
     {
       id: 'gas',
       name: 'Gas',
-      icon: '🔥',
+      icon: Flame,
       providers: [
-        { id: 'indane', name: 'Indane Gas', category: 'gas', icon: '🔥', color: 'bg-orange-500' },
-        { id: 'hp_gas', name: 'HP Gas', category: 'gas', icon: '🔥', color: 'bg-orange-500' },
-        { id: 'bharat_gas', name: 'Bharat Gas', category: 'gas', icon: '🔥', color: 'bg-orange-500' },
+        { id: 'indane', name: 'Indane Gas', category: 'gas', icon: Flame, color: 'bg-orange-500' },
+        { id: 'hp_gas', name: 'HP Gas', category: 'gas', icon: Flame, color: 'bg-orange-500' },
+        { id: 'bharat_gas', name: 'Bharat Gas', category: 'gas', icon: Flame, color: 'bg-orange-500' },
       ]
     },
     {
       id: 'water',
       name: 'Water',
-      icon: '💧',
+      icon: Droplets,
       providers: [
-        { id: 'bmc', name: 'BMC Water', category: 'water', icon: '💧', color: 'bg-blue-500' },
-        { id: 'delhi_jal', name: 'Delhi Jal Board', category: 'water', icon: '💧', color: 'bg-blue-500' },
-        { id: 'bwssb', name: 'BWSSB', category: 'water', icon: '💧', color: 'bg-blue-500' },
+        { id: 'bmc', name: 'BMC Water', category: 'water', icon: Droplets, color: 'bg-blue-500' },
+        { id: 'delhi_jal', name: 'Delhi Jal Board', category: 'water', icon: Droplets, color: 'bg-blue-500' },
+        { id: 'bwssb', name: 'BWSSB', category: 'water', icon: Droplets, color: 'bg-blue-500' },
       ]
     },
     {
       id: 'mobile',
       name: 'Mobile',
-      icon: '📱',
+      icon: Smartphone,
       providers: [
-        { id: 'airtel', name: 'Airtel', category: 'mobile', icon: '📱', color: 'bg-red-500' },
-        { id: 'jio', name: 'Jio', category: 'mobile', icon: '📱', color: 'bg-blue-600' },
-        { id: 'vi', name: 'Vi (Vodafone Idea)', category: 'mobile', icon: '📱', color: 'bg-red-600' },
-        { id: 'bsnl', name: 'BSNL', category: 'mobile', icon: '📱', color: 'bg-yellow-600' },
+        { id: 'airtel', name: 'Airtel', category: 'mobile', icon: Smartphone, color: 'bg-red-500' },
+        { id: 'jio', name: 'Jio', category: 'mobile', icon: Smartphone, color: 'bg-blue-600' },
+        { id: 'vi', name: 'Vi (Vodafone Idea)', category: 'mobile', icon: Smartphone, color: 'bg-red-600' },
+        { id: 'bsnl', name: 'BSNL', category: 'mobile', icon: Smartphone, color: 'bg-yellow-600' },
       ]
     },
     {
       id: 'internet',
       name: 'Internet',
-      icon: '🌐',
+      icon: Globe,
       providers: [
-        { id: 'jio_fiber', name: 'Jio Fiber', category: 'internet', icon: '🌐', color: 'bg-blue-600' },
-        { id: 'airtel_fiber', name: 'Airtel Xstream', category: 'internet', icon: '🌐', color: 'bg-red-500' },
-        { id: 'act', name: 'ACT Fibernet', category: 'internet', icon: '🌐', color: 'bg-purple-500' },
+        { id: 'jio_fiber', name: 'Jio Fiber', category: 'internet', icon: Globe, color: 'bg-blue-600' },
+        { id: 'airtel_fiber', name: 'Airtel Xstream', category: 'internet', icon: Globe, color: 'bg-red-500' },
+        { id: 'act', name: 'ACT Fibernet', category: 'internet', icon: Globe, color: 'bg-purple-500' },
       ]
     },
     {
       id: 'dth',
       name: 'DTH/Cable',
-      icon: '📺',
+      icon: Tv,
       providers: [
-        { id: 'tata_sky', name: 'Tata Play', category: 'dth', icon: '📺', color: 'bg-blue-700' },
-        { id: 'dish_tv', name: 'Dish TV', category: 'dth', icon: '📺', color: 'bg-orange-600' },
-        { id: 'airtel_dth', name: 'Airtel Digital TV', category: 'dth', icon: '📺', color: 'bg-red-500' },
+        { id: 'tata_sky', name: 'Tata Play', category: 'dth', icon: Tv, color: 'bg-blue-700' },
+        { id: 'dish_tv', name: 'Dish TV', category: 'dth', icon: Tv, color: 'bg-orange-600' },
+        { id: 'airtel_dth', name: 'Airtel Digital TV', category: 'dth', icon: Tv, color: 'bg-red-500' },
       ]
     }
   ];
@@ -201,7 +202,7 @@ export default function BillPaymentScreen() {
                 onPress={() => router.back()}
                 className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mr-4"
               >
-                <Text className="text-white text-xl">←</Text>
+                <ArrowLeft size={20} color="white" />
               </Pressable>
               <Text className="text-2xl font-bold text-white">Pay Bills</Text>
             </View>
@@ -220,7 +221,9 @@ export default function BillPaymentScreen() {
                         opacity: pressed ? 0.7 : 1,
                       })}
                     >
-                      <Text className="text-3xl mb-2">{category.icon}</Text>
+                      <View className="mb-2">
+                        <category.icon size={32} color="white" />
+                      </View>
                       <Text className="text-white font-medium text-center">{category.name}</Text>
                     </Pressable>
                   ))}
@@ -236,7 +239,7 @@ export default function BillPaymentScreen() {
                     onPress={() => setSelectedCategory('')}
                     className="mr-3"
                   >
-                    <Text className="text-white/60 text-xl">←</Text>
+                    <ArrowLeft size={20} color="rgba(255, 255, 255, 0.6)" />
                   </Pressable>
                   <Text className="text-white text-lg font-semibold">
                     Select {billCategories.find(cat => cat.id === selectedCategory)?.name} Provider
@@ -253,10 +256,10 @@ export default function BillPaymentScreen() {
                       })}
                     >
                       <View className={`w-12 h-12 ${provider.color} rounded-full items-center justify-center mr-4`}>
-                        <Text className="text-white text-xl">{provider.icon}</Text>
+                        <provider.icon size={20} color="white" />
                       </View>
                       <Text className="text-white font-medium flex-1">{provider.name}</Text>
-                      <Text className="text-white/40 text-xl">›</Text>
+                      <ChevronRight size={20} color="rgba(255, 255, 255, 0.4)" />
                     </Pressable>
                   ))}
                 </View>
@@ -271,10 +274,10 @@ export default function BillPaymentScreen() {
                     onPress={() => setSelectedProvider(null)}
                     className="mr-3"
                   >
-                    <Text className="text-white/60 text-xl">←</Text>
+                    <ArrowLeft size={20} color="rgba(255, 255, 255, 0.6)" />
                   </Pressable>
                   <View className={`w-10 h-10 ${selectedProvider.color} rounded-full items-center justify-center mr-3`}>
-                    <Text className="text-white">{selectedProvider.icon}</Text>
+                    <selectedProvider.icon size={16} color="white" />
                   </View>
                   <Text className="text-white text-lg font-semibold">{selectedProvider.name}</Text>
                 </View>

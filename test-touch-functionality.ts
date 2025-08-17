@@ -33,14 +33,12 @@ const testTouchFunctionality = async () => {
   await store.collectKeystroke(testKeystroke);
 
   // Touch and keystroke functionality test completed successfully!
-// Touch events collected: store.touchEvents.length
-// Keystrokes collected: store.keystrokes.length
-// Behavior data initialized: {
-    loginBehavior: store.loginBehavior !== null,
-    locationBehavior: store.locationBehavior !== null,
-    deviceBehavior: store.deviceBehavior !== null,
-    networkBehavior: store.networkBehavior !== null,
-  });
+  // Touch events collected: store.touchEvents.length
+  // Keystrokes collected: store.keystrokes.length
+  // Behavior data initialized:
+  // - locationBehavior: store.locationBehavior !== null
+  // - deviceBehavior: store.deviceBehavior !== null
+  // - networkBehavior: store.networkBehavior !== null
 };
 
 export { testTouchFunctionality };

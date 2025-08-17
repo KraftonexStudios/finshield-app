@@ -62,8 +62,8 @@ export default function RootLayout() {
       // End both data collection sessions when app unmounts
       const endDataCollectionSession = async () => {
         try {
-          // End useDataCollectionStore session (this will also send data to server)
-          await useDataCollectionStore.getState().endSession();
+          // End useDataCollectionStore session and send data to server
+          await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
         } catch (error) {
           // Failed to end data collection store session
         }

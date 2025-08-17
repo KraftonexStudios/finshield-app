@@ -1,6 +1,7 @@
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { ArrowLeft, Fingerprint, Lock, Sparkles, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, Text, View } from 'react-native';
 
@@ -9,7 +10,7 @@ let LocalAuthentication: any = null;
 try {
   LocalAuthentication = require('expo-local-authentication');
 } catch (error) {
-    // expo-local-authentication not available
+  // expo-local-authentication not available
 }
 
 type BiometricType = 'face' | 'fingerprint' | null;
@@ -18,7 +19,7 @@ interface BiometricOption {
   type: BiometricType;
   title: string;
   description: string;
-  icon: string;
+  icon: React.ComponentType<any>;
   available: boolean;
 }
 
@@ -29,14 +30,14 @@ export default function BiometricSetupScreen() {
       type: 'face',
       title: 'Face ID',
       description: 'Use your face to unlock the app quickly and securely',
-      icon: '👤',
+      icon: User,
       available: false,
     },
     {
       type: 'fingerprint',
       title: 'Fingerprint',
       description: 'Use your fingerprint to unlock the app quickly and securely',
-      icon: '👆',
+      icon: Fingerprint,
       available: false,
     },
   ]);
@@ -165,7 +166,7 @@ export default function BiometricSetupScreen() {
               onPress={() => router.back()}
               className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mb-8"
             >
-              <Text className="text-white text-xl">←</Text>
+              <ArrowLeft size={24} color="white" />
             </Pressable>
 
             <Text className="text-3xl font-bold text-white mb-3">
@@ -201,7 +202,9 @@ export default function BiometricSetupScreen() {
                   })}
                 >
                   <View className="flex-row items-center">
-                    <Text className="text-4xl mr-4">{option.icon}</Text>
+                    <View className="mr-4">
+                      <option.icon size={48} color="white" />
+                    </View>
                     <View className="flex-1">
                       <Text className="text-xl font-semibold text-white mb-1">
                         {option.title}
@@ -221,9 +224,12 @@ export default function BiometricSetupScreen() {
 
               {/* Benefits Section */}
               <View className="bg-white/5 rounded-2xl p-5 mt-6 border border-white/10">
-                <Text className="text-white text-sm font-semibold mb-2">
-                  ✨ Benefits of Biometric Authentication
-                </Text>
+                <View className="flex-row items-center mb-2">
+                  <Sparkles size={16} color="white" style={{ marginRight: 8 }} />
+                  <Text className="text-white text-sm font-semibold">
+                    Benefits of Biometric Authentication
+                  </Text>
+                </View>
                 <Text className="text-white/70 text-sm leading-5">
                   • Faster and more convenient login{"\n"}
                   • Enhanced security for your account{"\n"}
@@ -234,7 +240,7 @@ export default function BiometricSetupScreen() {
             </View>
           ) : (
             <View className="flex-1 justify-center items-center">
-              <Text className="text-6xl mb-6">🔒</Text>
+              <Lock size={96} color="white" style={{ marginBottom: 24 }} />
               <Text className="text-xl font-semibold text-white mb-2 text-center">
                 Biometric Not Available
               </Text>

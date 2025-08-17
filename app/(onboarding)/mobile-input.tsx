@@ -1,9 +1,9 @@
+import { TextInputWrapper } from '@/components/TextInputWrapper';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, View } from 'react-native';
-import { TextInputWrapper } from '@/components/TextInputWrapper';
 
 export default function MobileInputScreen() {
   const { setMobileNumber, checkUserExists, isLoading, error, userExists, setError } = useUserStore();

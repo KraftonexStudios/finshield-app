@@ -1,11 +1,22 @@
 import { useUserStore } from '@/stores/useUserStore';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React from 'react';
-import { Pressable, SafeAreaView, Text, View } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Image, Pressable, SafeAreaView, Text, View } from 'react-native';
+
 
 export default function GetStartedScreen() {
   const setOnboardingStep = useUserStore((state) => state.setOnboardingStep);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const handleGetStarted = () => {
     setOnboardingStep('permissions');
@@ -14,60 +25,47 @@ export default function GetStartedScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-black">
-      <View className="flex-1 justify-center items-center px-6">
-        {/* Logo/Brand Section */}
-        <View className="mb-20">
-          {/* Gradient Circles */}
-          <View className="relative w-32 h-32 items-center justify-center">
-            <LinearGradient
-              colors={['#8B5CF6', '#EC4899']}
-              className="w-24 h-24 rounded-full absolute -top-2 -left-2"
-              style={{ opacity: 0.9 }}
-            />
-            <LinearGradient
-              colors={['#F59E0B', '#EC4899']}
-              className="w-20 h-20 rounded-full absolute top-1 left-6"
-              style={{ opacity: 0.8 }}
-            />
-            <LinearGradient
-              colors={['#EAB308', '#F59E0B']}
-              className="w-16 h-16 rounded-full absolute top-4 left-1"
-              style={{ opacity: 0.7 }}
-            />
-          </View>
-        </View>
-
-        {/* Welcome Text */}
-        <View className="mb-12 items-center">
-          <Text className="text-white text-4xl font-bold mb-3">
+      <Animated.View
+        style={{ flex: 1, opacity: fadeAnim }}
+        className="justify-between items-center px-6 pb-10"
+      >
+        {/* Top / Hero Section */}
+        <View className="flex-1 justify-center items-center">
+          <Image
+            source={require('@/assets/logo.png')}
+            className="w-32 h-32 mb-6"
+            resizeMode="contain"
+          />
+          <Text className="text-white text-4xl font-bold text-center">
             Welcome to
           </Text>
-          <Text className="text-white text-4xl font-bold mb-6">
-            BanKitka
+          <Text className="text-[#0ED068] text-4xl font-extrabold text-center mt-1">
+            Sential
           </Text>
-          <Text className="text-gray-400 text-lg text-center leading-6">
+          <Text className="text-gray-400 text-lg text-center leading-6 mt-3 px-6">
             Take control of your finance
           </Text>
         </View>
 
-        {/* Get Started Button */}
-        <View className="absolute bottom-20 left-6 right-6">
-          <Pressable
-            onPress={handleGetStarted}
-            className="bg-green-400 rounded-full py-5 px-8 flex-row items-center justify-center"
-            style={({ pressed }) => ({
-              opacity: pressed ? 0.8 : 1,
-            })}
-          >
-            <Text className="text-black text-lg font-bold mr-3">
-              GET STARTED
-            </Text>
-            <View className="w-8 h-8 bg-black rounded-full items-center justify-center">
-              <Text className="text-green-400 text-lg font-bold">→</Text>
-            </View>
-          </Pressable>
-        </View>
-      </View>
+        {/* CTA Button */}
+        <Pressable
+          onPress={handleGetStarted}
+          className="bg-[#0ED068] rounded-full py-5 px-8 flex-row items-center justify-center w-full"
+          style={({ pressed }) => ({
+            opacity: pressed ? 0.85 : 1,
+            shadowColor: '#0ED068',
+            shadowOpacity: 0.4,
+            shadowOffset: { width: 0, height: 6 },
+            shadowRadius: 10,
+            elevation: 5,
+          })}
+        >
+          <Text className="text-black text-lg font-bold mr-3">GET STARTED</Text>
+          <View className="w-9 h-9 bg-black rounded-full items-center justify-center">
+            <ChevronRight size={18} color="#0ED068" />
+          </View>
+        </Pressable>
+      </Animated.View>
     </SafeAreaView>
   );
 }

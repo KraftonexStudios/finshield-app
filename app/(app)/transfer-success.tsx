@@ -1,5 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Check, ChevronRight, Clipboard, Lightbulb, Upload } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, SafeAreaView, Share, Text, View } from 'react-native';
 
@@ -61,7 +62,7 @@ export default function TransferSuccessScreen() {
           {/* Success Animation */}
           <View className="items-center mb-8">
             <View className="w-24 h-24 bg-green-500 rounded-full items-center justify-center mb-4">
-              <Text className="text-white text-4xl">✓</Text>
+              <Check size={48} color="white" />
             </View>
             <Text className="text-white text-2xl font-bold mb-2">Transfer Successful!</Text>
             <Text className="text-white/70 text-center text-base">
@@ -127,13 +128,13 @@ export default function TransferSuccessScreen() {
               })}
             >
               <View className="w-10 h-10 bg-blue-500 rounded-full items-center justify-center mr-3">
-                <Text className="text-white text-lg">📤</Text>
+                <Upload size={20} color="white" />
               </View>
               <View className="flex-1">
                 <Text className="text-white font-medium">Share Receipt</Text>
                 <Text className="text-white/60 text-sm">Send transaction details</Text>
               </View>
-              <Text className="text-white/40 text-xl">›</Text>
+              <ChevronRight size={20} color="rgba(255, 255, 255, 0.4)" />
             </Pressable>
 
             <Pressable
@@ -144,20 +145,22 @@ export default function TransferSuccessScreen() {
               })}
             >
               <View className="w-10 h-10 bg-purple-500 rounded-full items-center justify-center mr-3">
-                <Text className="text-white text-lg">📋</Text>
+                <Clipboard size={20} color="white" />
               </View>
               <View className="flex-1">
                 <Text className="text-white font-medium">View All Transactions</Text>
                 <Text className="text-white/60 text-sm">Check transaction history</Text>
               </View>
-              <Text className="text-white/40 text-xl">›</Text>
+              <ChevronRight size={20} color="rgba(255, 255, 255, 0.4)" />
             </Pressable>
           </View>
 
           {/* Success Tips */}
           <View className="bg-green-500/10 rounded-2xl p-4 mb-8 border border-green-500/20">
             <View className="flex-row items-start">
-              <Text className="text-green-400 text-lg mr-2">💡</Text>
+              <View className="mr-2">
+                <Lightbulb size={20} color="#4ade80" />
+              </View>
               <View className="flex-1">
                 <Text className="text-green-400 font-semibold mb-1">Pro Tip</Text>
                 <Text className="text-green-400/80 text-sm">

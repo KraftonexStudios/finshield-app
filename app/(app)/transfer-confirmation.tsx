@@ -33,29 +33,32 @@ export default function TransferConfirmationScreen() {
 
       // Process the transaction
       const transactionData = {
-        id: Date.now().toString(),
-        type: 'debit' as const,
+        fromMobile: user?.mobile || '',
+        toMobile: mobileNumber,
+        type: 'transfer' as const,
         amount: parseInt(amount),
         description: `Transfer to ${recipientName || mobileNumber}`,
-        date: new Date().toISOString(),
+        note: note || '',
+        reference: `TXN${Date.now()}${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        status: 'pending' as const,
+        // Include recipient in the additional fields
         recipient: {
           name: recipientName || 'Unknown',
           mobile: mobileNumber
         },
-        note: note || '',
-        status: 'completed' as const
+        category: 'transfer' as const
       };
 
-      await processTransaction(transactionData);
+      const transactionId = await processTransaction(transactionData);
 
-      // Navigate to success screen
-      router.replace({
-        pathname: '/(app)/transfer-success',
+      // Navigate to success screen with transaction details
+      router.push({
+        pathname: '/transfer-success',
         params: {
           amount,
           recipientName: recipientName || 'Unknown',
           mobileNumber,
-          transactionId: transactionData.id
+          transactionId
         }
       });
     } catch (error) {

@@ -43,7 +43,7 @@ const encodeBase64 = (str: string): string => {
 };
 
 // Initialize Firebase for native Android
-console.log("🔥 Firebase Service: Initializing for native Android");
+console.log("[FIREBASE] Firebase Service: Initializing for native Android");
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const authInstance = auth();
@@ -52,7 +52,7 @@ class FirebaseService {
   private confirmationResult: any = null;
 
   constructor() {
-    console.log("🔥 Firebase Service initialized for native Android");
+    console.log("[FIREBASE] Firebase Service initialized for native Android");
   }
 
   // Expose onAuthStateChanged method for external use
@@ -189,6 +189,24 @@ class FirebaseService {
     } catch (error) {
       console.error("Error updating last login:", error);
       throw new Error("Failed to update last login");
+    }
+  }
+
+  // Update user data
+  async updateUserData(
+    userId: string,
+    data: Partial<FirebaseUser>
+  ): Promise<void> {
+    try {
+      const userDocRef = doc(db, "users", userId);
+      const cleanData = this.removeUndefinedValues(data);
+      await updateDoc(userDocRef, {
+        ...cleanData,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error updating user data:", error);
+      throw new Error("Failed to update user data");
     }
   }
 
@@ -462,6 +480,59 @@ class FirebaseService {
     }
   }
 
+  // Get security questions from database
+  async getSecurityQuestions(userId: string): Promise<{
+    success: boolean;
+    questions: { id: string; question: string }[];
+
+    message: string;
+  }> {
+    try {
+      const userDocRef = doc(db, "users", userId);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        return {
+          success: false,
+          questions: [],
+          message: "User not found",
+        };
+      }
+
+      const userData = userDoc.data() as FirebaseUser;
+
+      if (
+        !userData.recoveryQuestions ||
+        userData.recoveryQuestions.length === 0
+      ) {
+        return {
+          success: false,
+          questions: [],
+          message: "No security questions found for user",
+        };
+      }
+
+      // Transform Firebase data to display format
+      const questions = userData.recoveryQuestions.map((q, index) => ({
+        id: (index + 1).toString(),
+        question: q.question,
+      }));
+
+      return {
+        success: true,
+        questions,
+        message: "Security questions retrieved successfully",
+      };
+    } catch (error) {
+      console.error("Error retrieving security questions:", error);
+      return {
+        success: false,
+        questions: [],
+        message: "Failed to retrieve security questions",
+      };
+    }
+  }
+
   // Validate PIN
   async validatePin(userId: string, pin: string): Promise<boolean> {
     try {
@@ -479,6 +550,87 @@ class FirebaseService {
     } catch (error) {
       console.error("Error validating PIN:", error);
       return false;
+    }
+  }
+
+  // Validate security questions through database query
+  async validateSecurityQuestions(
+    userId: string,
+    answers: { questionId: string; answer: string }[]
+  ): Promise<{
+    success: boolean;
+    correctAnswers: number;
+    totalQuestions: number;
+    message: string;
+  }> {
+    try {
+      const userDocRef = doc(db, "users", userId);
+      const userDoc = await getDoc(userDocRef);
+
+      if (!userDoc.exists()) {
+        return {
+          success: false,
+          correctAnswers: 0,
+          totalQuestions: 0,
+          message: "User not found",
+        };
+      }
+
+      const userData = userDoc.data() as FirebaseUser;
+
+      if (
+        !userData.recoveryQuestions ||
+        userData.recoveryQuestions.length === 0
+      ) {
+        return {
+          success: false,
+          correctAnswers: 0,
+          totalQuestions: 0,
+          message: "No security questions found for user",
+        };
+      }
+
+      // Validate answers through database comparison
+      let correctAnswers = 0;
+      const totalQuestions = userData.recoveryQuestions.length;
+
+      answers.forEach((userAnswer) => {
+        const questionIndex = parseInt(userAnswer.questionId) - 1;
+        if (
+          questionIndex >= 0 &&
+          questionIndex < userData.recoveryQuestions.length
+        ) {
+          const storedQuestion = userData.recoveryQuestions[questionIndex];
+          const userAnswerHash = encodeBase64(
+            userAnswer.answer.toLowerCase().trim()
+          );
+
+          if (storedQuestion.answerHash === userAnswerHash) {
+            correctAnswers++;
+          }
+        }
+      });
+
+      // Require at least 70% correct answers
+      const requiredCorrect = Math.ceil(totalQuestions * 0.7);
+      const success = correctAnswers >= requiredCorrect;
+
+      return {
+        success,
+        correctAnswers,
+        totalQuestions,
+        message: success
+          ? "Security questions validated successfully"
+          : `Only ${correctAnswers} out of ${totalQuestions} answers were correct. ${requiredCorrect} required.`,
+      };
+    } catch (error) {
+      console.error("Error validating security questions:", error);
+      return {
+        success: false,
+        correctAnswers: 0,
+        totalQuestions: 0,
+        message: "Database validation failed",
+      };
     }
   }
 

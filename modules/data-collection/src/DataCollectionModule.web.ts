@@ -1,20 +1,20 @@
-import { registerWebModule, NativeModule } from 'expo';
+import { NativeModule, registerWebModule } from "expo";
 
-import { ChangeEventPayload } from './DataCollection.types';
+import { ChangeEventPayload } from "./DataCollection.types";
 
 type DataCollectionModuleEvents = {
   onChange: (params: ChangeEventPayload) => void;
-}
+};
 
 class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
   PI = Math.PI;
-  
+
   async setValueAsync(value: string): Promise<void> {
-    this.emit('onChange', { value });
+    this.emit("onChange", { value });
   }
-  
+
   hello() {
-    return 'Hello world! 👋';
+    return "Hello world! 👋";
   }
 
   // Data collection methods for web (stub implementations)
@@ -22,7 +22,7 @@ class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
     return {
       touchEvents: true,
       keystrokes: true,
-      deviceInfo: true
+      deviceInfo: true,
     };
   }
 
@@ -42,21 +42,31 @@ class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
   }> {
     return {
       timestamp: Date.now(),
-      ...touchData
+      ...touchData,
     };
   }
 
   async collectKeystrokeNative(keystrokeData: {
-    key: string;
-    inputType: string;
-  }): Promise<{
+    character: string;
     timestamp: number;
-    key: string;
-    inputType: string;
+    dwellTime: number;
+    flightTime: number;
+    coordinate_x: number;
+    coordinate_y: number;
+    pressure?: number;
+  }): Promise<{
+    character: string;
+    timestamp: number;
+    dwellTime: number;
+    flightTime: number;
+    coordinate_x: number;
+    coordinate_y: number;
+    pressure?: number;
   }> {
+    // Web fallback - return the data as-is since we don't have native enhancements
     return {
-      timestamp: Date.now(),
-      ...keystrokeData
+      ...keystrokeData,
+      timestamp: keystrokeData.timestamp || Date.now(),
     };
   }
 
@@ -73,7 +83,7 @@ class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
       touchEvents: 0,
       keystrokeEvents: 0,
       sessionStartTime: now,
-      lastActivity: now
+      lastActivity: now,
     };
   }
 
@@ -92,21 +102,21 @@ class DataCollectionModule extends NativeModule<DataCollectionModuleEvents> {
       hasOverlayPermission: false,
       hasUnknownApps: false,
       accessibilityServices: [],
-      activeInputMethod: 'default',
+      activeInputMethod: "default",
       appUsagePatterns: {},
       hardwareAttestation: true,
       deviceFingerprint: {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
-        language: navigator.language
-      }
+        language: navigator.language,
+      },
     };
   }
 
   async resetSession(): Promise<void> {
     // Web stub - no action needed
-    console.log('Session reset (web stub)');
+    console.log("Session reset (web stub)");
   }
-};
+}
 
-export default registerWebModule(DataCollectionModule, 'DataCollectionModule');
+export default registerWebModule(DataCollectionModule, "DataCollectionModule");

@@ -10,18 +10,35 @@ export interface MobileTouchEvent {
   duration: number; // Calculate (endTime - startTime) Native Module with kotlin
   distance?: number; // JS: Calculate Math.sqrt((endX-startX)² + (endY-startY)²)
   velocity?: number; // JS: Calculate distance/duration
+  pressure?: number; // JS: event.nativeEvent.force - touch pressure (0.0 to 1.0), undefined if not supported
 }
 
 export interface MobileKeystroke {
   character: string; // JS: event.nativeEvent.key
-  timestamp: number; // JS: Date.now() or Native: KeyEvent.getEventTime()
-  dwellTime: number; //  Native: ACTION_DOWN to ACTION_UP Kotlin
-  flightTime: number; // JS: Calculate (currentKeystroke.timestamp - previousKeystroke.timestamp)
-  x: number; // JS: event.nativeEvent.touches[0].pageX or Native: MotionEvent.getX()
-  y: number; // JS: event.nativeEvent.touches[0].pageY or Native: MotionEvent.getY()
-  action?: "up" | "down"; // Native: KeyEvent action type for authentic timing
+  timestamp: number; // JS: Date.now() or Native: KeyEvent.getEventTime() - timestamp of keydown event
+  dwellTime: number; // Native: ACTION_DOWN to ACTION_UP duration in milliseconds
+  flightTime: number; // Native/JS: Time between previous keyup and current keydown
+  coordinate_x: number; // JS: event.nativeEvent.touches[0].pageX or Native: MotionEvent.getX()
+  coordinate_y: number; // JS: event.nativeEvent.touches[0].pageY or Native: MotionEvent.getY()
+  pressure?: number; // Native: MotionEvent.getPressure() - touch pressure (0.0 to 1.0)
   inputType?: "password" | "email" | "amount" | "mobile" | "text"; // JS: Input field type context
+  actionValue?: 0 | 1; // 0 = keydown, 1 = keyup - for proper event pairing
 }
+
+// Legacy interface for backward compatibility - will be deprecated
+// export interface LegacyMobileKeystroke {
+//   character: string;
+//   timestamp: number;
+//   dwellTime: number;
+//   flightTime: number;
+//   x: number;
+//   y: number;
+//   action: 0 | 1; // 0 = keydown, 1 = keyup
+//   inputType?: "password" | "email" | "amount" | "mobile" | "text";
+//   pageX?: number;
+//   pageY?: number;
+//   pressure?: number;
+// }
 
 export interface MobileMotionEvents {
   timestamp: number; // JS: Date.now() or Native: System.currentTimeMillis()
@@ -46,7 +63,7 @@ export interface MobileMotionEvents {
 
   motionMagnitude?: number; // JS: Calculate Math.sqrt(ax² + ay² + az²)
   rotationRate?: number; // JS: Calculate Math.sqrt(gx² + gy² + gz²)
-  orientationChange?: number; // JS: Calculate from magnetometer and accelerometer data
+  // orientationChange?: number; // JS: Calculate from magnetometer and accelerometer data
 }
 
 export interface MotionPattern {
@@ -62,15 +79,6 @@ export interface TouchGesture {
 export interface TypingPattern {
   inputType: "password" | "email" | "amount" | "mobile" | "text"; // JS: App context/state
   keystrokes: MobileKeystroke[]; // JS/Native: Collect from TextInput events or KeyEvent
-}
-
-export interface LoginBehavior {
-  timestamp: number; // JS: Date.now() on session start
-  loginFlow: "pin" | "biometric" | "passwordless"; // JS: App logic/state
-  biometricOutcome: "success" | "failure" | "not_available" | "user_cancelled"; //expo-local-authentication
-  biometricType: "fingerprint" | "face_id" | "none"; // expo-local-authentication
-  loginError?: string; // JS: Error handling in auth flow
-  failedAttempts?: number; // JS: Track failed login attempts
 }
 
 export interface LocationBehavior {
@@ -128,7 +136,6 @@ export interface BehavioralSession {
   touchPatterns: TouchGesture[];
   typingPatterns: TypingPattern[];
   motionPattern: MotionPattern[];
-  loginBehavior: LoginBehavior;
   locationBehavior: LocationBehavior;
   networkBehavior: NetworkBehavior;
   deviceBehavior: DeviceBehavior;
