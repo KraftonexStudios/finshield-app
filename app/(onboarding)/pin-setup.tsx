@@ -1,8 +1,7 @@
-import { TextInputWrapper } from '@/components/TextInputWrapper';
+import DataCollectionTextInput from '@/components/DataCollectionTextInput';
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, Lock } from 'lucide-react-native';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Pressable, SafeAreaView, Text, TextInput, View } from 'react-native';
 
@@ -117,127 +116,107 @@ export default function PinSetupScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={['#1a1a2e', '#16213e', '#0f3460']}
-      className="flex-1"
-    >
-      <SafeAreaView className="flex-1 bg-black">
-        <KeyboardAvoidingView
-          behavior='height'
-          className="flex-1"
-        >
-          <View className="flex-1 px-8 py-8">
-            {/* Header */}
-            <View className="mb-16">
-              <Pressable
-                onPress={handleBack}
-                className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mb-8"
-              >
-                <ArrowLeft size={24} color="white" />
-              </Pressable>
 
-              <Text className="text-3xl font-bold text-white mb-3">
-                {step === 'create' ? 'Create PIN' : 'Confirm PIN'}
-              </Text>
-              <Text className="text-white/70 text-lg leading-6">
-                {step === 'create'
-                  ? 'Create a 4-digit PIN to secure your account'
-                  : 'Re-enter your PIN to confirm'
-                }
-              </Text>
-            </View>
+    <SafeAreaView className="flex-1 bg-black">
+      <KeyboardAvoidingView
+        behavior='height'
+        className="flex-1"
+      >
+        <View className="flex-1 px-8 py-8">
+          {/* Header */}
+          <View className="mb-16">
+            <BackButton onPress={handleBack} className="mb-8" />
 
-            {/* PIN Display */}
-            <View className="items-center mb-16">
-              {renderPinDots(currentPin)}
-            </View>
+            <Text className="text-3xl font-bold text-white mb-3">
+              {step === 'create' ? 'Create PIN' : 'Confirm PIN'}
+            </Text>
+            <Text className="text-white/70 text-lg leading-6">
+              {step === 'create'
+                ? 'Create a 4-digit PIN to secure your account'
+                : 'Re-enter your PIN to confirm'
+              }
+            </Text>
+          </View>
 
-            {/* Hidden PIN Input */}
-            <View className="flex-row justify-between opacity-0 absolute">
-              {currentPin.map((digit, index) => (
-                <TextInputWrapper
-                  key={`${step}-${index}`}
-                  ref={(ref) => {
-                    if (ref) inputRefs.current[index] = ref;
-                  }}
-                  value={digit}
-                  onChangeText={(value) => handlePinChange(value, index)}
-                  onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
-                  keyboardType="numeric"
-                  maxLength={1}
-                  secureTextEntry
-                  autoFocus={index === 0}
-                  inputType="password"
-                />
-              ))}
-            </View>
+          {/* PIN Display */}
+          <View className="items-center mb-16">
+            {renderPinDots(currentPin)}
+          </View>
 
-            {/* Custom Keypad */}
-            <View className="flex-1 justify-center">
-              <View className="bg-white/5 rounded-3xl p-8 border border-white/10">
-                {/* Number Grid */}
-                <View className="mb-6">
-                  {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', '⌫']].map((row, rowIndex) => (
-                    <View key={rowIndex} className="flex-row justify-center mb-6">
-                      {row.map((num, colIndex) => {
-                        if (num === '') {
-                          return <View key={colIndex} className="w-20 h-20 mx-4" />;
-                        }
+          {/* Hidden PIN Input */}
+          <View className="flex-row justify-between opacity-0 absolute">
+            {currentPin.map((digit, index) => (
+              <DataCollectionTextInput
+                key={`${step}-${index}`}
+                ref={(ref: any) => {
+                  if (ref) inputRefs.current[index] = ref;
+                }}
+                value={digit}
+                onChangeText={(value) => handlePinChange(value, index)}
+                onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
+                showSoftInputOnFocus={false}
+                keyboardType="numeric"
+                maxLength={1}
+                secureTextEntry
+                autoFocus={index === 0}
+                inputType="password"
+              />
+            ))}
+          </View>
 
-                        return (
-                          <Pressable
-                            key={colIndex}
-                            onPress={() => {
-                              if (num === '⌫') {
-                                // Handle backspace
-                                const currentIndex = currentPin.findIndex(digit => digit === '');
-                                const indexToDelete = currentIndex === -1 ? 3 : Math.max(0, currentIndex - 1);
-                                const newPin = [...currentPin];
-                                newPin[indexToDelete] = '';
-                                setCurrentPin(newPin);
-                                inputRefs.current[indexToDelete]?.focus();
-                              } else {
-                                // Handle number input
-                                const emptyIndex = currentPin.findIndex(digit => digit === '');
-                                if (emptyIndex !== -1) {
-                                  handlePinChange(num, emptyIndex);
-                                }
+          {/* Custom Keypad */}
+          <View className="flex-1 justify-center">
+            <View className="bg-white/5 rounded-3xl p-8 border border-white/10">
+              {/* Number Grid */}
+              <View className="mb-6">
+                {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', '⌫']].map((row, rowIndex) => (
+                  <View key={rowIndex} className="flex-row justify-center mb-6">
+                    {row.map((num, colIndex) => {
+                      if (num === '') {
+                        return <View key={colIndex} className="w-20 h-20 mx-4" />;
+                      }
+
+                      return (
+                        <Pressable
+                          key={colIndex}
+                          onPress={() => {
+                            if (num === '⌫') {
+                              // Handle backspace
+                              const currentIndex = currentPin.findIndex(digit => digit === '');
+                              const indexToDelete = currentIndex === -1 ? 3 : Math.max(0, currentIndex - 1);
+                              const newPin = [...currentPin];
+                              newPin[indexToDelete] = '';
+                              setCurrentPin(newPin);
+                              inputRefs.current[indexToDelete]?.focus();
+                            } else {
+                              // Handle number input
+                              const emptyIndex = currentPin.findIndex(digit => digit === '');
+                              if (emptyIndex !== -1) {
+                                handlePinChange(num, emptyIndex);
                               }
-                            }}
-                            className="w-20 h-20 rounded-full bg-white/10 items-center justify-center mx-4 border border-white/20"
-                            style={({ pressed }) => ({
-                              opacity: pressed ? 0.7 : 1,
-                            })}
-                          >
-                            <Text className="text-2xl font-semibold text-white">
-                              {num}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ))}
-                </View>
+                            }
+                          }}
+                          className="w-20 h-20 rounded-full bg-white/10 items-center justify-center mx-4 border border-white/20"
+                          style={({ pressed }) => ({
+                            opacity: pressed ? 0.7 : 1,
+                          })}
+                        >
+                          <Text className="text-2xl font-semibold text-white">
+                            {num}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
-            </View>
-
-            {/* Security Info */}
-            <View className="bg-white/5 rounded-2xl p-5 mt-6 border border-white/10">
-              <View className="flex-row items-center mb-2">
-                <Lock size={16} color="white" style={{ marginRight: 8 }} />
-                <Text className="text-white text-sm font-semibold">
-                  PIN Security Tips
-                </Text>
-              </View>
-              <Text className="text-white/70 text-sm leading-5">
-                • Choose a PIN that's easy for you to remember{"\n"}
-                • Don't use obvious combinations like 1234 or your birth year{"\n"}
-                • Never share your PIN with anyone
-              </Text>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </LinearGradient>
+
+          {/* Security Info */}
+
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

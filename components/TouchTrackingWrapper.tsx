@@ -50,7 +50,6 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
 
     const { pageX, pageY, touches, force } = event.nativeEvent;
     const currentTime = Date.now();
-    const timeDiff = currentTime - touchData.current.lastMoveTime;
 
     // Calculate distance from start position
     const deltaX = pageX - touchData.current.startX;
@@ -75,10 +74,20 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
       }
     }
 
-    // Optional: Log only significant movements to avoid spam
+    // Store end pressure for final calculation
+    if (force !== undefined && force !== null && force > 0) {
+      touchData.current.endPressure = force;
+    }
+
+    // Only log significant movements, don't collect data during move
     const velocity = distance / (currentTime - touchData.current.startTime);
     if (velocity > 0.5) {
-      console.log('Touch move collected, velocity:', velocity.toFixed(3));
+      console.log('🔄 Touch move detected:', {
+        velocity: velocity.toFixed(3),
+        gestureType: touchData.current.isScrolling ? "scroll" : "swipe",
+        coords: `(${pageX}, ${pageY})`,
+        distance: distance.toFixed(2)
+      });
     }
   };
 
@@ -138,20 +147,37 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
         averagePressure = undefined; // Device doesn't support pressure
       }
 
+      // For taps and short gestures, use start coordinates as end coordinates if end coordinates are invalid
+      let finalEndX = pageX;
+      let finalEndY = pageY;
+
+      // If this is a tap or the end coordinates are invalid/zero, use start coordinates
+      if (gestureType === "tap" || pageX === 0 || pageY === 0 || pageX === undefined || pageY === undefined) {
+        finalEndX = touchData.current.startX;
+        finalEndY = touchData.current.startY;
+      }
+
       // Call the store's collectTouchEvent to generate patterns
       await collectTouchEvent({
         gestureType,
         startX: touchData.current.startX,
         startY: touchData.current.startY,
-        endX: pageX,
-        endY: pageY,
+        endX: finalEndX,
+        endY: finalEndY,
         duration,
         distance,
         velocity,
         pressure: averagePressure
       });
 
-      console.log('Touch end collected, duration:', duration + 'ms');
+      console.log('✅ Touch end collected:', {
+        gestureType,
+        duration: duration + 'ms',
+        startCoords: `(${touchData.current.startX}, ${touchData.current.startY})`,
+        endCoords: `(${finalEndX}, ${finalEndY})`,
+        distance: distance.toFixed(2),
+        velocity: velocity.toFixed(3)
+      });
     } catch (error) {
       console.error('Failed to collect touch event:', error);
     }

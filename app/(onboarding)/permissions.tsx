@@ -1,12 +1,12 @@
 import { useDataCollectionStore } from "@/stores/useDataCollectionStore";
 import { useUserStore } from "@/stores/useUserStore";
 import * as Contacts from "expo-contacts";
-import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
 import { requireNativeModule } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import {
+  ArrowLeft,
   BarChart3,
   Bell,
   Check,
@@ -44,6 +44,7 @@ export default function PermissionsScreen() {
   const insets = useSafeAreaInsets();
   const setOnboardingStep = useUserStore((state) => state.setOnboardingStep);
   const { startDataCollection, requestPermissions } = useDataCollectionStore();
+  const [isLoading, setIsLoading] = useState(false);
 
   const [permissions, setPermissions] = useState<Permission[]>([
     {
@@ -76,7 +77,7 @@ export default function PermissionsScreen() {
       description: "Fraud detection & security",
       icon: BarChart3,
       granted: false,
-      required: true,
+      required: false,
     },
   ]);
 
@@ -173,16 +174,29 @@ export default function PermissionsScreen() {
       );
       return;
     }
-    await requestPermissions();
 
-    // Start session first, then data collection
-    // This ensures we have session data to send later in loading-setup
-    const { startSession } = useDataCollectionStore.getState();
-    await startSession('onboarding_user'); // Temporary user ID for onboarding
-    await startDataCollection("initial-registration");
+    setIsLoading(true);
+    try {
+      // Navigate immediately for better UX
+      setOnboardingStep("mobile-input");
+      router.push("/(onboarding)/mobile-input");
 
-    setOnboardingStep("mobile-input");
-    router.push("/(onboarding)/mobile-input");
+      // Run heavy operations in background after navigation
+      setTimeout(async () => {
+        try {
+          await requestPermissions();
+          const { startSession } = useDataCollectionStore.getState();
+          await startSession('onboarding_user');
+          await startDataCollection("initial-registration");
+        } catch (error) {
+          console.warn('Background permission setup failed:', error);
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Navigation failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const allRequiredGranted = permissions
@@ -190,13 +204,23 @@ export default function PermissionsScreen() {
     .every((p) => p.granted);
 
   return (
-    <SafeAreaView className="flex-1 bg-black">
-      {/* Header */}
-      <View className="px-6 pt-8 pb-6 items-center">
-        <Text className="text-white text-3xl font-bold mb-2">
-          Security Permissions
-        </Text>
-        <Text className="text-white/70 text-center text-base leading-5">
+    <SafeAreaView className="flex-1 bg-zinc-950">
+      {/* Header with Back Button */}
+      <View className="px-6 py-5 border-b border-zinc-800/50 mt-4">
+        <View className="flex-row items-center justify-between mb-4">
+          <Pressable
+            onPress={() => router.back()}
+            className="w-10 h-10 rounded-full bg-zinc-800/50 items-center justify-center"
+            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+          >
+            <ArrowLeft size={20} color="#a1a1aa" />
+          </Pressable>
+          <Text className="text-zinc-100 text-lg font-semibold">
+            Security Permissions
+          </Text>
+          <View className="w-10" />
+        </View>
+        <Text className="text-zinc-400 text-center text-sm leading-5">
           Enable these for the best banking experience and protection.
         </Text>
       </View>
@@ -205,29 +229,29 @@ export default function PermissionsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         className="flex-1 px-6"
-        contentContainerStyle={{ paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 140, paddingTop: 20 }}
       >
         {permissions.map((p) => (
           <Pressable
             key={p.id}
             onPress={() => requestPermission(p.id)}
-            className="bg-white/5 rounded-2xl px-5 py-4 mb-4 flex-row items-center"
+            className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl px-5 py-4 mb-4 flex-row items-center"
             style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
           >
-            <View className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mr-4">
-              <p.icon size={22} color="white" />
+            <View className="w-12 h-12 rounded-full bg-zinc-800/50 items-center justify-center mr-4">
+              <p.icon size={22} color="#a1a1aa" />
             </View>
             <View className="flex-1">
-              <Text className="text-white text-base font-semibold">
+              <Text className="text-zinc-100 text-base font-semibold">
                 {p.title}
               </Text>
-              <Text className="text-white/60 text-sm">{p.description}</Text>
+              <Text className="text-zinc-400 text-sm">{p.description}</Text>
             </View>
             <View className="ml-3">
               {p.granted ? (
-                <Check size={18} color="#0ED068" />
+                <Check size={18} color="#22c55e" />
               ) : (
-                <Text className="text-white/50 text-sm">Allow</Text>
+                <Text className="text-zinc-500 text-sm">Allow</Text>
               )}
             </View>
           </Pressable>
@@ -242,44 +266,33 @@ export default function PermissionsScreen() {
           gap: 12,
         }}
       >
-        {/* Refresh Button with gradient */}
-        <Pressable onPress={checkAllPermissions} style={{ borderRadius: 50 }}>
-          {({ pressed }) => (
-            <LinearGradient
-              colors={["#1A1A1A", "#2A2A2A"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                borderRadius: 50,
-                paddingVertical: 12,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.2)",
-                opacity: pressed ? 0.85 : 1,
-              }}
-            >
-              <View className="flex-row items-center justify-center">
-                <RefreshCw size={16} color="white" style={{ marginRight: 8 }} />
-                <Text className="text-center text-sm font-medium text-white">
-                  Refresh Permission Status
-                </Text>
-              </View>
-            </LinearGradient>
-          )}
+        {/* Refresh Button */}
+        <Pressable
+          onPress={checkAllPermissions}
+          className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl py-3 mb-3"
+          style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+        >
+          <View className="flex-row items-center justify-center">
+            <RefreshCw size={16} color="#a1a1aa" style={{ marginRight: 8 }} />
+            <Text className="text-center text-sm font-medium text-zinc-300">
+              Refresh Permission Status
+            </Text>
+          </View>
         </Pressable>
 
         {/* Continue Button */}
         <Pressable
           onPress={handleContinue}
-          className={`rounded-full py-4 ${allRequiredGranted ? "bg-white" : "bg-white/20"
+          className={`rounded-xl py-4 ${allRequiredGranted ? "bg-zinc-100" : "bg-zinc-800/50 border border-zinc-700/50"
             }`}
-          disabled={!allRequiredGranted}
+          disabled={!allRequiredGranted || isLoading}
           style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
         >
           <Text
-            className={`text-center text-lg font-semibold ${allRequiredGranted ? "text-black" : "text-white/50"
+            className={`text-center text-lg font-semibold ${allRequiredGranted ? "text-zinc-900" : "text-zinc-500"
               }`}
           >
-            Continue
+            {isLoading ? 'Setting up...' : 'Continue'}
           </Text>
         </Pressable>
       </View>

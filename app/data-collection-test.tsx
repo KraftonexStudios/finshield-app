@@ -22,7 +22,7 @@ import {
 } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { TextInputWrapper } from '../components/TextInputWrapper';
+import DataCollectionTextInput from '../components/DataCollectionTextInput';
 import { TouchTrackingWrapper } from '../components/TouchTrackingWrapper';
 import { useDataCollectionStore } from '../stores/useDataCollectionStore';
 
@@ -206,16 +206,15 @@ export default function DataCollectionTest() {
         </Text>
 
         <TouchTrackingWrapper>
-          <TextInputWrapper inputType="text">
-            <TextInput
-              value={testText}
-              onChangeText={setTestText}
-              placeholder="Type here to test keystroke collection..."
-              className="border border-gray-300 rounded p-3 bg-white"
-              multiline
-              numberOfLines={3}
-            />
-          </TextInputWrapper>
+          <DataCollectionTextInput
+            value={testText}
+            onChangeText={setTestText}
+            placeholder="Type here to test keystroke collection..."
+            className="border border-gray-300 rounded p-3 bg-white"
+            multiline
+            numberOfLines={3}
+            inputType="text"
+          />
         </TouchTrackingWrapper>
       </View>
 

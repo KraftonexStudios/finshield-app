@@ -49,6 +49,25 @@ try {
 // Debouncing utility for state updates
 let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Performance optimization: Use requestAnimationFrame for smooth UI updates
+let animationFrameId: number | null = null;
+let pendingStateUpdates: (() => void)[] = [];
+
+const scheduleStateUpdate = (updateFn: () => void) => {
+  pendingStateUpdates.push(updateFn);
+
+  if (animationFrameId === null) {
+    animationFrameId = requestAnimationFrame(() => {
+      // Execute all pending updates in a single frame
+      const updates = [...pendingStateUpdates];
+      pendingStateUpdates = [];
+      animationFrameId = null;
+
+      updates.forEach((update) => update());
+    });
+  }
+};
+
 interface DataCollectionState {
   // Session Management
   currentSession: BehavioralSession | null;
@@ -71,6 +90,7 @@ interface DataCollectionState {
   lastTouchEventTime: number;
   lastKeystrokeTime: number;
   lastProcessedKeyIdentifier: string | null;
+  lastKeystrokeCoordinates: { x: number; y: number } | null;
   currentInputType: "password" | "email" | "amount" | "mobile" | "text" | null;
   pendingKeydowns: Map<
     string,
@@ -184,6 +204,15 @@ interface DataCollectionState {
     endpoint: string,
     sessionData: BehavioralSession
   ) => Promise<void>;
+  calculateDataSize: (data: any) => number;
+  validateSessionData: (sessionData: BehavioralSession) => {
+    isValid: boolean;
+    reason?: string;
+  };
+  chunkSessionData: (
+    sessionData: BehavioralSession,
+    maxSizeBytes?: number
+  ) => BehavioralSession[];
 }
 
 export const useDataCollectionStore = create<DataCollectionState>()(
@@ -205,6 +234,7 @@ export const useDataCollectionStore = create<DataCollectionState>()(
     lastTouchEventTime: 0,
     lastKeystrokeTime: 0,
     lastProcessedKeyIdentifier: null,
+    lastKeystrokeCoordinates: null,
     currentInputType: null,
     pendingKeydowns: new Map(),
     touchEvents: [],
@@ -504,6 +534,15 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       try {
         const state = get();
 
+        // Prevent starting multiple sessions
+        if (state.isCollecting && state.collectionScenario) {
+          console.log(
+            "🟡 Data collection already active for scenario:",
+            state.collectionScenario
+          );
+          return;
+        }
+
         // Reset native module session state
         try {
           if (BehavioralDataCollectorModule) {
@@ -694,25 +733,57 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 
         get().stopMotionCollection();
 
-        // Generate final touch pattern from remaining touch events if any
-        let finalTouchPatterns = [...state.touchGestures];
-        if (state.touchEvents.length > 0) {
-          // Create a final pattern from any remaining touch events
-          const remainingTouchPattern: TouchGesture = {
-            touches: state.touchEvents,
-          };
-          finalTouchPatterns.push(remainingTouchPattern);
-        }
+        // Consolidate all touch events into a single TouchGesture
+        const allTouchEvents = [
+          ...state.touchGestures.flatMap((gesture) => gesture.touches),
+          ...state.touchEvents,
+        ];
 
-        // Preserve typing patterns before state reset
-        const preservedTypingPatterns = [...state.typingPatterns];
+        const consolidatedTouchPatterns: TouchGesture[] =
+          allTouchEvents.length > 0
+            ? [
+                {
+                  touches: allTouchEvents,
+                },
+              ]
+            : [];
+
+        // Consolidate all typing patterns by inputType into single objects
+        // Only use raw keystrokes from state to prevent duplication from existing patterns
+        const consolidatedTypingPatterns: TypingPattern[] = [];
+        const keystrokesByInputType = new Map<string, MobileKeystroke[]>();
+
+        // Only use keystrokes from state to prevent duplication
+        state.keystrokes.forEach((keystroke) => {
+          if (keystroke.inputType) {
+            const existing =
+              keystrokesByInputType.get(keystroke.inputType) || [];
+            existing.push(keystroke);
+            keystrokesByInputType.set(keystroke.inputType, existing);
+          }
+        });
+
+        // Create consolidated typing patterns
+        keystrokesByInputType.forEach((keystrokes, inputType) => {
+          if (keystrokes.length > 0) {
+            consolidatedTypingPatterns.push({
+              inputType: inputType as
+                | "password"
+                | "email"
+                | "amount"
+                | "mobile"
+                | "text",
+              keystrokes: keystrokes.sort((a, b) => a.timestamp - b.timestamp), // Sort by timestamp
+            });
+          }
+        });
 
         const sessionData: BehavioralSession = {
           sessionId: state.currentSession.sessionId,
           userId: state.currentSession.userId,
           timestamp: state.currentSession.timestamp,
-          touchPatterns: finalTouchPatterns,
-          typingPatterns: preservedTypingPatterns,
+          touchPatterns: consolidatedTouchPatterns,
+          typingPatterns: consolidatedTypingPatterns,
           motionPattern: state.motionPatterns,
           locationBehavior: state.currentSession.locationBehavior,
           networkBehavior: state.currentSession.networkBehavior,
@@ -793,6 +864,9 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       set({
         currentSession: null,
         isCollecting: false,
+        isKeystrokeCollecting: false,
+        isTouchCollecting: false,
+        isMotionCollecting: false,
         sessionId: null,
         userId: null,
         collectionScenario: null,
@@ -828,9 +902,34 @@ export const useDataCollectionStore = create<DataCollectionState>()(
         if (!state.isCollecting) return;
 
         const timestamp = Date.now();
-        // Throttle touch events to avoid overwhelming data (max 10 events per second)
+        // Enhanced throttling: avoid overwhelming data and prevent duplicate coordinates
         if (timestamp - state.lastTouchEventTime < 100) {
+          // Reduced to max 10 events per second for better navigation performance
           return;
+        }
+
+        // Prevent storing duplicate or very similar touch events
+        const lastTouchEvent = state.touchEvents[state.touchEvents.length - 1];
+        if (lastTouchEvent) {
+          const coordinateThreshold = 10; // pixels
+          const timeThreshold = 100; // milliseconds
+          const xDiff = Math.abs((event.startX || 0) - lastTouchEvent.startX);
+          const yDiff = Math.abs((event.startY || 0) - lastTouchEvent.startY);
+          const timeDiff = timestamp - lastTouchEvent.timestamp;
+
+          // Skip if coordinates are too similar and time difference is small
+          if (
+            xDiff < coordinateThreshold &&
+            yDiff < coordinateThreshold &&
+            timeDiff < timeThreshold
+          ) {
+            console.log("🟡 Skipped duplicate touch event:", {
+              xDiff: xDiff.toFixed(1),
+              yDiff: yDiff.toFixed(1),
+              timeDiff,
+            });
+            return;
+          }
         }
         let touchEvent: MobileTouchEvent = {
           gestureType: event.gestureType || "tap",
@@ -879,46 +978,27 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           } catch (nativeError) {}
         }
 
-        // Store touch events immediately without debouncing to ensure they're captured
-        set((state) => {
-          const newTouchEvents =
-            state.touchEvents.length >= 100
-              ? [...state.touchEvents.slice(-49), touchEvent] // Keep last 50 events when at limit
-              : [...state.touchEvents, touchEvent];
+        // Use async state update to prevent blocking navigation
+        scheduleStateUpdate(() => {
+          set((state) => {
+            const newTouchEvents =
+              state.touchEvents.length >= 100
+                ? [...state.touchEvents.slice(-49), touchEvent] // Keep last 50 events when at limit
+                : [...state.touchEvents, touchEvent];
 
-          // Generate touch pattern in real-time (every 3 touch events for more frequent patterns)
-          let newTouchGestures = state.touchGestures;
-          if (newTouchEvents.length % 3 === 0 && newTouchEvents.length > 0) {
-            // Create a new TouchGesture with recent touch events
-            const recentTouchEvents = newTouchEvents.slice(-5); // Use last 5 touch events
-            const touchGesture: TouchGesture = {
-              touches: recentTouchEvents,
-            };
-
-            console.log("🔵 Generated touch pattern in real-time:", {
-              touchCount: recentTouchEvents.length,
-              gestureTypes: recentTouchEvents.map((t) => t.gestureType),
-              averageVelocity: (
-                recentTouchEvents.reduce(
-                  (sum, t) => sum + (t.velocity || 0),
-                  0
-                ) / recentTouchEvents.length
-              ).toFixed(2),
-              totalPatterns: state.touchGestures.length + 1,
-              patternTimestamp: new Date().toLocaleTimeString(),
+            // Just collect touch events - patterns will be consolidated at session end
+            console.log("🔵 Collected touch event:", {
+              gestureType: touchEvent.gestureType,
+              distance: touchEvent.distance,
+              velocity: touchEvent.velocity,
+              totalEvents: newTouchEvents.length,
             });
 
-            newTouchGestures = [
-              ...state.touchGestures.slice(-9), // Keep last 10 patterns
-              touchGesture,
-            ];
-          }
-
-          return {
-            touchEvents: newTouchEvents,
-            touchGestures: newTouchGestures,
-            lastTouchEventTime: timestamp,
-          };
+            return {
+              touchEvents: newTouchEvents,
+              lastTouchEventTime: timestamp,
+            };
+          });
         });
       } catch (error) {
         set((state) => ({
@@ -954,36 +1034,26 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           return;
         }
 
-        const timestamp = Date.now();
-
-        // Validate timing - prevent impossible scenarios, but allow keydown/keyup pairs
-        // Only check timing for same action type to allow quick keydown->keyup sequences
+        const timestamp = event.timestamp || Date.now();
         const actionValue: 0 | 1 = event.actionValue ?? 1;
-        const keyIdentifier = `${event.character}_${event.inputType || "text"}_${actionValue}`;
+        // const keyIdentifier = `${event.character}_${event.inputType || "text"}_${actionValue}`;
 
-        // More lenient timing check - only prevent truly duplicate events (same key, same action, within 5ms)
-        if (
-          timestamp - state.lastKeystrokeTime < 5 &&
-          state.lastProcessedKeyIdentifier === keyIdentifier
-        ) {
-          console.warn(`Duplicate keystroke event ignored: ${keyIdentifier}`);
-          return;
-        }
-
+        // NO DUPLICATE DETECTION - Capture everything to ensure nothing is missed
+        // All keystrokes are processed regardless of timing or repetition
         console.log(
-          `🔵 Store - Processing keystroke: ${event.character}, actionValue: ${actionValue}`
+          `🟢 Processing ALL keystrokes: '${event.character}' (${actionValue === 0 ? "keydown" : "keyup"}) - No filtering applied`
         );
 
-        // Update last processed key identifier for duplicate detection
-        set((state) => ({
-          lastProcessedKeyIdentifier: keyIdentifier,
-          lastKeystrokeTime: timestamp,
-        }));
+        // Update timing for session tracking only using async update
+        scheduleStateUpdate(() => {
+          set((state) => ({
+            lastKeystrokeTime: timestamp,
+          }));
+        });
 
-        // Handle keydown/keyup pairing for simplified structure
         const keyPairIdentifier = `${event.character}_${event.inputType || "text"}`;
 
-        // keydown event - store for later pairing with keyup
+        // Handle keydown event
         if (actionValue === 0) {
           const keydownData = {
             timestamp,
@@ -993,42 +1063,49 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             pressure: event.pressure,
           };
 
-          // Store keydown data for later pairing
-          set((state) => {
-            const newPendingKeydowns = new Map(state.pendingKeydowns);
-            newPendingKeydowns.set(keyPairIdentifier, keydownData);
-            return {
-              pendingKeydowns: newPendingKeydowns,
-            };
+          scheduleStateUpdate(() => {
+            set((state) => {
+              const newPendingKeydowns = new Map(state.pendingKeydowns);
+              newPendingKeydowns.set(keyPairIdentifier, keydownData);
+              return {
+                pendingKeydowns: newPendingKeydowns,
+              };
+            });
           });
 
           console.log(
             `🔵 Store - Keydown stored: ${event.character}, pending count: ${get().pendingKeydowns.size + 1}`
           );
-          return; // Don't create keystroke object yet, wait for keyup
+          return;
         }
 
-        // keyup event - create single keystroke object with calculated timing
+        // Handle keyup event
         if (actionValue === 1) {
           const keydownData = state.pendingKeydowns.get(keyPairIdentifier);
           if (!keydownData) {
             console.warn(
               `No matching keydown found for keyup event: '${event.character}'`
             );
-            return; // Skip if no matching keydown
+            return;
           }
 
-          // Calculate dwell time (time between keydown and keyup)
-          const dwellTime = Math.max(0, timestamp - keydownData.timestamp);
-
-          // Validate dwell time is reasonable (between 30ms and 3000ms)
-          if (dwellTime < 30 || dwellTime > 3000) {
+          // Calculate timing
+          let dwellTime = Math.max(0, timestamp - keydownData.timestamp);
+          if (dwellTime < 5) {
+            dwellTime = Math.max(dwellTime, 15);
+            console.log(
+              `Adjusted extremely fast dwell time to ${dwellTime}ms for '${event.character}'`
+            );
+          } else if (dwellTime < 15) {
+            console.log(
+              `Very fast typing detected: ${dwellTime}ms dwell time for '${event.character}'`
+            );
+          } else if (dwellTime > 5000) {
             console.warn(
-              `Unusual dwell time: ${dwellTime}ms for character '${event.character}'`
+              `Very long dwell time: ${dwellTime}ms for character '${event.character}' - possible UI freeze`
             );
           }
 
-          // Calculate flight time from previous keystroke
           let flightTime = 0;
           const lastKeystroke = state.keystrokes[state.keystrokes.length - 1];
           if (lastKeystroke) {
@@ -1038,22 +1115,21 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             );
           }
 
-          // Create simplified keystroke object without action field
-          let keystroke: MobileKeystroke = {
+          // Create keystroke object
+          const keystroke: MobileKeystroke = {
             character: event.character || "",
-            timestamp: keydownData.timestamp, // Use keydown timestamp as primary timestamp
+            timestamp: keydownData.timestamp,
             dwellTime,
             flightTime,
             coordinate_x: keydownData.x,
             coordinate_y: keydownData.y,
-            pressure: keydownData.pressure, // undefined if device doesn't support pressure
+            pressure: keydownData.pressure,
             inputType: keydownData.inputType,
           };
 
-          // Send data to native module for logging and storage, but prioritize JS calculations
+          // Send to native module if available
           if (BehavioralDataCollectorModule) {
             try {
-              // Send our calculated values to native module for storage and logging
               await BehavioralDataCollectorModule.collectKeystroke({
                 character: keystroke.character,
                 timestamp: keystroke.timestamp,
@@ -1064,8 +1140,6 @@ export const useDataCollectionStore = create<DataCollectionState>()(
                 pressure: keydownData.pressure,
               });
 
-              // Keep JavaScript store calculations as the authoritative source
-              // Native module is used only for logging, debugging, and additional storage
               console.log(
                 `Keystroke collected - Character: ${keystroke.character}, JS Dwell Time: ${dwellTime}ms, JS Flight Time: ${flightTime}ms`
               );
@@ -1077,27 +1151,32 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             }
           }
 
-          // Remove from pending keydowns
+          // Clean up pending keydowns
           state.pendingKeydowns.delete(keyPairIdentifier);
-
-          // Check if input type has changed and generate pattern for previous input type
           const currentInputType = keystroke.inputType;
           const previousInputType = get().currentInputType;
 
-          if (previousInputType && previousInputType !== currentInputType) {
-            get().generateTypingPatternForInputType(previousInputType);
-          }
+          set({ currentInputType });
+          console.log(
+            `Input type changed from ${previousInputType} to ${currentInputType}`
+          );
 
-          // Clean up old keydown events (older than 5 seconds) to prevent memory leaks
+          // Clean up old keydown events
           const currentTime = timestamp;
+          let cleanedCount = 0;
           for (const [key, keydownData] of state.pendingKeydowns.entries()) {
-            if (currentTime - keydownData.timestamp > 5000) {
+            if (currentTime - keydownData.timestamp > 1500) {
               state.pendingKeydowns.delete(key);
-              console.warn(`Cleaned up orphaned keydown event: ${key}`);
+              cleanedCount++;
             }
           }
+          if (cleanedCount > 0) {
+            console.warn(
+              `Cleaned up ${cleanedCount} orphaned keydown events with improved queuing`
+            );
+          }
 
-          // Store keystrokes with proper validation
+          // Store keystroke asynchronously
           console.log("🔴 [KEYSTROKE STORAGE] About to store keystroke:", {
             character: keystroke.character,
             inputType: keystroke.inputType,
@@ -1106,54 +1185,70 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             currentKeystrokeCount: get().keystrokes.length,
           });
 
-          set((state) => {
-            const newKeystrokes =
-              state.keystrokes.length >= 200
-                ? [...state.keystrokes.slice(-99), keystroke] // Keep last 100 events when at limit
-                : [...state.keystrokes, keystroke];
+          scheduleStateUpdate(() => {
+            set((state) => {
+              const newKeystrokes =
+                state.keystrokes.length >= 200
+                  ? [...state.keystrokes.slice(-99), keystroke]
+                  : [...state.keystrokes, keystroke];
 
-            console.log("🔴 [KEYSTROKE STORAGE] Keystroke stored:", {
-              newKeystrokeCount: newKeystrokes.length,
-              previousCount: state.keystrokes.length,
-              keystrokeAdded: keystroke.character,
-            });
+              console.log("🔴 [KEYSTROKE STORAGE] Keystroke stored:", {
+                newKeystrokeCount: newKeystrokes.length,
+                previousCount: state.keystrokes.length,
+                keystrokeAdded: keystroke.character,
+              });
 
-            // Generate typing pattern every 10 complete key presses
-            if (newKeystrokes.length > 0 && newKeystrokes.length % 10 === 0) {
-              const recentKeystrokes = newKeystrokes.slice(-40); // Get more context
-              const inputType = keystroke.inputType || "text";
+              // Generate typing patterns every 10 keystrokes (reduced frequency)
+              if (newKeystrokes.length > 0 && newKeystrokes.length % 10 === 0) {
+                // Delay pattern generation to reduce immediate CPU load
+                setTimeout(() => {
+                  const recentKeystrokes = newKeystrokes.slice(-25);
+                  const inputType = keystroke.inputType || "text";
 
-              const typingPattern: TypingPattern = {
-                inputType,
-                keystrokes: recentKeystrokes,
-              };
+                  const typingPattern: TypingPattern = {
+                    inputType,
+                    keystrokes: recentKeystrokes,
+                  };
 
-              console.log(
-                "🔴 [KEYSTROKE STORAGE] Generated typing pattern (10 complete keystrokes):",
-                {
-                  inputType,
-                  totalKeystrokeCount: recentKeystrokes.length,
-                  newTypingPatternCount: state.typingPatterns.length + 1,
-                }
-              );
+                  console.log(
+                    "🔴 [KEYSTROKE STORAGE] Generated typing pattern (10 complete keystrokes - optimized):",
+                    {
+                      inputType,
+                      totalKeystrokeCount: recentKeystrokes.length,
+                      newTypingPatternCount: get().typingPatterns.length + 1,
+                    }
+                  );
+
+                  scheduleStateUpdate(() => {
+                    set((state) => ({
+                      ...state,
+                      typingPatterns: [...state.typingPatterns, typingPattern],
+                    }));
+                  });
+                }, 100); // 100ms delay for pattern generation
+
+                return {
+                  ...state,
+                  keystrokes: newKeystrokes,
+                };
+              }
 
               return {
+                ...state,
                 keystrokes: newKeystrokes,
-                lastKeystrokeTime: timestamp,
-                currentInputType: currentInputType,
-                typingPatterns: [
-                  ...state.typingPatterns.slice(-9),
-                  typingPattern,
-                ],
               };
-            }
+            });
+          });
 
-            return {
-              keystrokes: newKeystrokes,
+          // Update lastKeystrokeTime and currentInputType asynchronously
+          scheduleStateUpdate(() => {
+            set((state) => ({
+              ...state,
               lastKeystrokeTime: timestamp,
               currentInputType: currentInputType,
-            };
+            }));
           });
+          // });
         }
       } catch (error) {
         console.error("Keystroke collection error:", error);
@@ -1188,9 +1283,10 @@ export const useDataCollectionStore = create<DataCollectionState>()(
         }
       );
 
-      if (!state.isCollecting && !forceGeneration) {
+      // Only generate patterns during session end (forceGeneration) to prevent duplication
+      if (!forceGeneration) {
         console.log(
-          `🔴 [PATTERN GENERATION] Not collecting and not forced - returning early`
+          `🔴 [PATTERN GENERATION] Pattern generation disabled during collection - only at session end`
         );
         return;
       }
@@ -1216,40 +1312,10 @@ export const useDataCollectionStore = create<DataCollectionState>()(
         }
       );
 
-      // Only generate pattern if we have enough keystrokes for this input type
-      if (inputTypeKeystrokes.length >= 5) {
-        const typingPattern: TypingPattern = {
-          inputType,
-          keystrokes: inputTypeKeystrokes.slice(-20), // Use last 20 keystrokes for this input type
-        };
-
-        console.log(
-          `🔴 [PATTERN GENERATION] Generated typing pattern for ${inputType}:`,
-          {
-            inputType,
-            totalFilteredKeystrokeCount: inputTypeKeystrokes.length,
-            patternKeystrokeCount: typingPattern.keystrokes.length,
-            previousTypingPatternCount: state.typingPatterns.length,
-          }
-        );
-
-        set((state) => {
-          const newTypingPatterns = [
-            ...state.typingPatterns.slice(-9),
-            typingPattern,
-          ];
-          console.log(
-            `🔴 [PATTERN GENERATION] Pattern stored - new count: ${newTypingPatterns.length}`
-          );
-          return {
-            typingPatterns: newTypingPatterns, // Keep last 10 patterns
-          };
-        });
-      } else {
-        console.log(
-          `🔴 [PATTERN GENERATION] Not enough keystrokes for ${inputType} pattern (need 5, have ${inputTypeKeystrokes.length})`
-        );
-      }
+      // This function is now only used during session end for final pattern generation
+      console.log(
+        `🔴 [PATTERN GENERATION] Force generation for ${inputType} with ${inputTypeKeystrokes.length} keystrokes`
+      );
     },
 
     // Optimized Motion Collection with throttling and efficient data structures
@@ -1274,16 +1340,16 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           // Removed sensor check error logging
         }
 
-        // Reduce update interval to 10Hz (100ms) for better performance
-        Accelerometer.setUpdateInterval(100);
-        Gyroscope.setUpdateInterval(100);
-        Magnetometer.setUpdateInterval(100);
+        // Optimize to 15Hz (66ms) for better navigation performance
+        Accelerometer.setUpdateInterval(66);
+        Gyroscope.setUpdateInterval(66);
+        Magnetometer.setUpdateInterval(66);
 
-        // Use circular buffer for efficient memory management
-        let motionBuffer: MobileMotionEvents[] = new Array(50).fill(null);
+        // Use circular buffer for efficient memory management (optimized for 15Hz)
+        let motionBuffer: MobileMotionEvents[] = new Array(75).fill(null); // 5 seconds at 15Hz
         let bufferIndex = 0;
         let lastUpdateTime = 0;
-        const THROTTLE_MS = 100; // Throttle updates to 10Hz
+        const THROTTLE_MS = 66; // Throttle updates to 15Hz for better navigation performance
 
         // Temporary storage for sensor data
         let latestAccelerometer = { x: 0, y: 0, z: 0 };
@@ -1317,20 +1383,16 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 
           // Removed motion event logging
 
-          // Update state less frequently to reduce re-renders with debouncing
-          if (bufferIndex % 10 === 0) {
+          // Update state less frequently to reduce re-renders (every 15 samples = 1 second at 15Hz)
+          if (bufferIndex % 15 === 0) {
             const validEvents = motionBuffer.filter((event) => event !== null);
-            const updateMotionEvents = () => {
+
+            // Use async state update to prevent blocking navigation
+            scheduleStateUpdate(() => {
               set((state) => ({
                 motionEvents: validEvents,
               }));
-            };
-
-            // Debounce motion state updates
-            if (updateTimeout) {
-              clearTimeout(updateTimeout);
-            }
-            updateTimeout = setTimeout(updateMotionEvents, 100);
+            });
           }
         };
 
@@ -1386,17 +1448,17 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           isMotionCollecting: true,
         });
 
-        // Create motion patterns every 10 seconds (less frequent)
+        // Create motion patterns every 5 seconds for continuous collection during session
         const patternInterval = setInterval(() => {
           const validEvents = motionBuffer.filter((event) => event !== null);
           if (validEvents.length > 0) {
             const pattern: MotionPattern = {
               samples: validEvents.slice(), // Copy the valid events
-              duration: 10000,
-              sampleRateHz: 10, // Updated sample rate
+              duration: 5000, // 5 seconds for more frequent patterns
+              sampleRateHz: 30, // Updated to 30Hz sample rate
             };
             set((state) => {
-              const newPatterns = [...state.motionPatterns.slice(-9), pattern]; // Keep last 10 patterns
+              const newPatterns = [...state.motionPatterns.slice(-19), pattern]; // Keep last 20 patterns for longer sessions
 
               // Removed motion pattern logging
 
@@ -1404,11 +1466,11 @@ export const useDataCollectionStore = create<DataCollectionState>()(
                 motionPatterns: newPatterns,
               };
             });
-            // Reset buffer
-            motionBuffer = new Array(50).fill(null);
+            // Reset buffer for next pattern
+            motionBuffer = new Array(150).fill(null);
             bufferIndex = 0;
           }
-        }, 10000);
+        }, 5000);
 
         // Store interval for cleanup
         set({ patternInterval } as any);
@@ -1642,42 +1704,258 @@ export const useDataCollectionStore = create<DataCollectionState>()(
     },
 
     // utility
+    // Helper function to calculate data size in bytes
+    calculateDataSize: (data: any): number => {
+      return new Blob([JSON.stringify(data)]).size;
+    },
+
+    // Helper function to validate data quality
+    validateSessionData: (
+      sessionData: BehavioralSession
+    ): { isValid: boolean; reason?: string } => {
+      // Check if session has basic required fields
+      if (!sessionData.sessionId || !sessionData.userId) {
+        return { isValid: false, reason: "Missing sessionId or userId" };
+      }
+
+      // Check if session has any meaningful data
+      const hasData =
+        (sessionData.touchPatterns && sessionData.touchPatterns.length > 0) ||
+        (sessionData.typingPatterns && sessionData.typingPatterns.length > 0) ||
+        (sessionData.motionPattern && sessionData.motionPattern.length > 0) ||
+        sessionData.locationBehavior ||
+        sessionData.networkBehavior ||
+        sessionData.deviceBehavior;
+
+      if (!hasData) {
+        return {
+          isValid: false,
+          reason: "No meaningful behavioral data collected",
+        };
+      }
+
+      return { isValid: true };
+    },
+
+    // Helper function to chunk large data
+    chunkSessionData: (
+      sessionData: BehavioralSession,
+      maxSizeBytes: number = 15 * 1024 * 1024
+    ): BehavioralSession[] => {
+      const chunks: BehavioralSession[] = [];
+      const baseData = {
+        sessionId: sessionData.sessionId,
+        userId: sessionData.userId,
+        timestamp: sessionData.timestamp,
+        locationBehavior: sessionData.locationBehavior,
+        networkBehavior: sessionData.networkBehavior,
+        deviceBehavior: sessionData.deviceBehavior,
+      };
+
+      // Start with base data and add behavioral data incrementally
+      let currentChunk: BehavioralSession = {
+        ...baseData,
+        touchPatterns: [],
+        typingPatterns: [],
+        motionPattern: [],
+      };
+
+      const addToChunk = (data: any, field: keyof BehavioralSession) => {
+        const testChunk = { ...currentChunk, [field]: data };
+        if (get().calculateDataSize(testChunk) <= maxSizeBytes) {
+          currentChunk = testChunk;
+          return true;
+        }
+        return false;
+      };
+
+      // Add touch patterns
+      if (sessionData.touchPatterns && sessionData.touchPatterns.length > 0) {
+        for (const pattern of sessionData.touchPatterns) {
+          if (
+            !addToChunk(
+              [...currentChunk.touchPatterns, pattern],
+              "touchPatterns"
+            )
+          ) {
+            // Current chunk is full, start a new one
+            chunks.push(currentChunk);
+            currentChunk = {
+              ...baseData,
+              touchPatterns: [pattern],
+              typingPatterns: [],
+              motionPattern: [],
+            };
+          }
+        }
+      }
+
+      // Add typing patterns
+      if (sessionData.typingPatterns && sessionData.typingPatterns.length > 0) {
+        for (const pattern of sessionData.typingPatterns) {
+          if (
+            !addToChunk(
+              [...currentChunk.typingPatterns, pattern],
+              "typingPatterns"
+            )
+          ) {
+            chunks.push(currentChunk);
+            currentChunk = {
+              ...baseData,
+              touchPatterns: [],
+              typingPatterns: [pattern],
+              motionPattern: [],
+            };
+          }
+        }
+      }
+
+      // Add motion patterns
+      if (sessionData.motionPattern && sessionData.motionPattern.length > 0) {
+        for (const pattern of sessionData.motionPattern) {
+          if (
+            !addToChunk(
+              [...currentChunk.motionPattern, pattern],
+              "motionPattern"
+            )
+          ) {
+            chunks.push(currentChunk);
+            currentChunk = {
+              ...baseData,
+              touchPatterns: [],
+              typingPatterns: [],
+              motionPattern: [pattern],
+            };
+          }
+        }
+      }
+
+      // Add the final chunk if it has data
+      if (
+        currentChunk.touchPatterns.length > 0 ||
+        currentChunk.typingPatterns.length > 0 ||
+        currentChunk.motionPattern.length > 0
+      ) {
+        chunks.push(currentChunk);
+      }
+
+      return chunks.length > 0 ? chunks : [currentChunk];
+    },
+
     sendSessionDataToServer: async (endpoint, sessionData) => {
       try {
+        // Validate session data quality first
+        const validation = get().validateSessionData(sessionData);
+        if (!validation.isValid) {
+          console.warn(`⚠️ Skipping data send - ${validation.reason}`);
+          throw new Error(`Invalid session data: ${validation.reason}`);
+        }
+
         console.log("🔴 Sending session data with typing patterns:", {
           sessionId: sessionData.sessionId,
           typingPatternsCount: sessionData.typingPatterns?.length || 0,
           typingPatterns: sessionData.typingPatterns,
         });
 
-        // Use the provided endpoint directly
+        // Calculate data size
+        const dataSize = get().calculateDataSize(sessionData);
+        const maxSize = 15 * 1024 * 1024; // 15MB limit
+
+        console.log(
+          `📊 Session data size: ${(dataSize / 1024 / 1024).toFixed(2)}MB`
+        );
+
         const targetEndpoint = buildApiUrl(endpoint);
         console.log("🔴 Target endpoint:", targetEndpoint);
 
-        // Real API call implementation with development fallback
         let responseData;
-        try {
-          const response = await fetch(targetEndpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Session-ID": sessionData.sessionId || "unknown",
-              "X-User-ID": sessionData.userId || "unknown",
-            },
-            body: JSON.stringify(sessionData),
-          });
 
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          console.log("🔴 Response:", response);
-
-          responseData = await response.json();
-        } catch (fetchError) {
+        // Check if data exceeds size limit
+        if (dataSize > maxSize) {
           console.log(
-            "🔴 Development mode - Simulated API response:",
-            fetchError
+            `📦 Data exceeds ${maxSize / 1024 / 1024}MB limit, chunking data...`
           );
+
+          // Chunk the data
+          const chunks = get().chunkSessionData(sessionData, maxSize);
+          console.log(`📦 Split into ${chunks.length} chunks`);
+
+          // Send chunks sequentially
+          const responses = [];
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const chunkSize = get().calculateDataSize(chunk);
+            console.log(
+              `📦 Sending chunk ${i + 1}/${chunks.length} (${(chunkSize / 1024 / 1024).toFixed(2)}MB)`
+            );
+
+            try {
+              const response = await fetch(targetEndpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Session-ID": chunk.sessionId || "unknown",
+                  "X-User-ID": chunk.userId || "unknown",
+                  "X-Chunk-Index": i.toString(),
+                  "X-Total-Chunks": chunks.length.toString(),
+                  "X-Is-Chunked": "true",
+                },
+                body: JSON.stringify(chunk),
+              });
+
+              if (!response.ok) {
+                throw new Error(
+                  `HTTP ${response.status}: ${response.statusText}`
+                );
+              }
+
+              const chunkResponse = await response.json();
+              responses.push(chunkResponse);
+              console.log(`✅ Chunk ${i + 1} sent successfully`);
+            } catch (fetchError) {
+              console.error(`❌ Failed to send chunk ${i + 1}:`, fetchError);
+              throw new Error(
+                `Failed to send chunk ${i + 1}: ${fetchError.message}`
+              );
+            }
+          }
+
+          responseData = {
+            chunked: true,
+            totalChunks: chunks.length,
+            responses: responses,
+            status: "success",
+          };
+        } else {
+          // Send data as single request (under 15MB limit)
+          console.log(`📤 Sending complete session data in single request`);
+
+          try {
+            const response = await fetch(targetEndpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Session-ID": sessionData.sessionId || "unknown",
+                "X-User-ID": sessionData.userId || "unknown",
+                "X-Is-Chunked": "false",
+              },
+              body: JSON.stringify(sessionData),
+            });
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+            console.log("🔴 Response:", response);
+
+            responseData = await response.json();
+          } catch (fetchError) {
+            console.error("❌ Failed to send session data:", fetchError);
+            throw new Error(
+              `Failed to send session data: ${fetchError.message}`
+            );
+          }
         }
 
         console.log("[SUCCESS] Session data sent successfully:", responseData);

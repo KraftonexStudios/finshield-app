@@ -18,6 +18,7 @@ import android.util.Log
 import android.telephony.TelephonyManager
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+// Removed Random import - collecting authentic data without artificial modifications
 
 class DataCollectionModule : Module() {
   
@@ -37,6 +38,8 @@ class DataCollectionModule : Module() {
   // Enhanced keystroke tracking for proper timing calculations
   private val pendingKeydowns = mutableMapOf<String, Long>() // Track keydown events by character
   private var lastKeyupTimestamp = 0L // Track last keyup for flight time calculation
+  private val activeKeyPresses = mutableMapOf<String, Long>() // Track actual keydown timestamps
+  private var lastKeystrokeTimestamp = 0L // For flight time calculation
   
   // Enhanced data classes matching TypeScript interfaces
   data class MobileTouchEventData(
@@ -212,6 +215,30 @@ class DataCollectionModule : Module() {
       }
     }
 
+    // Track keydown events for native timing calculation
+    AsyncFunction("trackKeydown") { keystrokeData: Map<String, Any>, promise: Promise ->
+      try {
+        val character = keystrokeData["character"] as? String ?: ""
+        val timestamp = System.currentTimeMillis()
+        
+        // Store keydown timestamp for this character
+        activeKeyPresses[character] = timestamp
+        
+        Log.d("DataCollectionModule", "Keydown tracked for '$character' at $timestamp")
+        
+        val responseData = mapOf(
+          "character" to character,
+          "timestamp" to timestamp,
+          "tracked" to true
+        )
+        
+        promise.resolve(responseData)
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error tracking keydown: ${e.message}")
+        promise.reject("KEYDOWN_TRACKING_ERROR", "Failed to track keydown: ${e.message}", e)
+      }
+    }
+
     // Enhanced Keystroke Collection with Simplified Structure (Single Object per Keystroke)
     AsyncFunction("collectKeystrokeNative") { keystrokeData: Map<String, Any>, promise: Promise ->
       try {
@@ -231,38 +258,67 @@ class DataCollectionModule : Module() {
         Log.d("DataCollectionModule", "Dwell time (original): $dwellTime ms")
         Log.d("DataCollectionModule", "Flight time: $flightTime ms, Coordinates: ($x, $y)")
         
-        // Use actual dwell time - validation should be done at the store level
-        // Only use fallback if dwell time is 0 or negative (invalid calculation)
-        // Generate realistic fallback based on character type (similar to JS implementation)
-        val fallbackDwellTime = when {
-            character.matches(Regex("[A-Z]")) -> (80 + (Math.random() * 40 - 20) + 15).toLong() // Capitals take longer
-            character.matches(Regex("[!@#$%^&*()_+{}|:<>?\\[\\]\\\\;'\",./<>?]")) -> (80 + (Math.random() * 40 - 20) + 25).toLong() // Special chars take longer
-            character == " " -> (80 + (Math.random() * 40 - 20) + 10).toLong() // Space slightly longer
-            character.matches(Regex("[0-9]")) -> (80 + (Math.random() * 40 - 20) - 5).toLong() // Numbers are faster
-            else -> (80 + (Math.random() * 40 - 20)).toLong() // Base time with variation
-        }.coerceIn(60L, 120L) // Ensure realistic range
+        // Calculate actual dwell time from native timing if available
+        val actualDwellTime = if (activeKeyPresses.containsKey(character)) {
+            val keydownTime = activeKeyPresses.remove(character) ?: 0L
+            if (keydownTime > 0L) timestamp - keydownTime else 0L
+        } else 0L
         
-        val validatedDwellTime = if (dwellTime > 0L) dwellTime else fallbackDwellTime
-        
-        // Log validation result
-        if (dwellTime <= 0L) {
-          Log.w("DataCollectionModule", "Invalid dwell time ($dwellTime ms) detected, using fallback value: 100ms")
-        } else if (dwellTime < 30L || dwellTime > 3000L) {
-          Log.w("DataCollectionModule", "Unusual dwell time detected: $dwellTime ms (outside typical 30-3000ms range)")
-        } else {
-          Log.d("DataCollectionModule", "Valid dwell time: $dwellTime ms")
+        // Use actual timing first, then provided timing as-is (no artificial modification)
+        val validatedDwellTime = when {
+            actualDwellTime > 0L -> actualDwellTime // Use real native timing
+            dwellTime > 0L -> dwellTime // Use provided timing as-is
+            else -> 0L // No fallback - preserve authentic data gaps
         }
-        Log.d("DataCollectionModule", "Final validated dwell time: $validatedDwellTime ms")
         
-        // Create simplified keystroke event (single object per keystroke)
+        // Calculate actual flight time without artificial modification
+        val calculatedFlightTime = if (lastKeystrokeTimestamp > 0L) {
+            timestamp - lastKeystrokeTimestamp
+        } else flightTime
+        
+        val validatedFlightTime = if (calculatedFlightTime > 0L) calculatedFlightTime else flightTime
+        
+        // Use actual coordinates without artificial variation
+        val naturalX = x
+        val naturalY = y
+        
+        // Log validation results
+        if (actualDwellTime > 0L) {
+          Log.d("DataCollectionModule", "Using actual native dwell time: $actualDwellTime ms")
+        } else if (dwellTime > 0L && dwellTime in 30L..500L) {
+          Log.d("DataCollectionModule", "Using provided dwell time: $dwellTime ms")
+        } else {
+          Log.d("DataCollectionModule", "Using realistic fallback dwell time: $validatedDwellTime ms")
+        }
+        
+        // Log actual data collection without modification
+         if (actualDwellTime > 0L) {
+           Log.d("DataCollectionModule", "Using actual native dwell time: $actualDwellTime ms")
+         } else if (dwellTime > 0L) {
+           Log.d("DataCollectionModule", "Using provided dwell time: $dwellTime ms")
+         } else {
+           Log.d("DataCollectionModule", "No dwell time data available - preserving authentic gap")
+         }
+         
+         // Log flight time source
+         if (calculatedFlightTime > 0L && calculatedFlightTime != flightTime) {
+           Log.d("DataCollectionModule", "Using calculated flight time: $calculatedFlightTime ms")
+         } else {
+           Log.d("DataCollectionModule", "Using provided flight time: $flightTime ms")
+         }
+        
+        // Update last keystroke timestamp for flight time calculation
+        lastKeystrokeTimestamp = timestamp
+        
+        // Create keystroke event with authentic data
         val inputType = keystrokeData["inputType"] as? String ?: "text"
         val keystrokeEvent = MobileKeystrokeData(
           character = character,
           timestamp = timestamp,
           dwellTime = validatedDwellTime,
-          flightTime = flightTime,
-          coordinate_x = x,
-          coordinate_y = y,
+          flightTime = validatedFlightTime,
+          coordinate_x = x, // Original coordinates
+          coordinate_y = y, // Original coordinates
           inputType = inputType,
           pressure = pressure
         )
@@ -270,15 +326,17 @@ class DataCollectionModule : Module() {
         keystrokeEvents.add(keystrokeEvent)
         lastKeystrokeTime = timestamp
         
-        // Return enhanced data with native module improvements
+        // Return authentic data without artificial modifications
         val responseData = mapOf(
           "character" to character,
           "timestamp" to timestamp,
           "dwellTime" to validatedDwellTime,
-          "flightTime" to flightTime,
-          "coordinate_x" to x,
-          "coordinate_y" to y,
-          "pressure" to pressure
+          "flightTime" to validatedFlightTime,
+          "coordinate_x" to x, // Original coordinates
+          "coordinate_y" to y, // Original coordinates
+          "pressure" to pressure,
+          "isNativeTiming" to (actualDwellTime > 0L),
+          "hasAuthenticData" to (actualDwellTime > 0L || dwellTime > 0L)
         )
         
         // Log response data
@@ -298,12 +356,14 @@ class DataCollectionModule : Module() {
         touchEvents.clear()
         keystrokeEvents.clear()
         pendingKeydowns.clear()
+        activeKeyPresses.clear() // Clear native timing tracking
         
         // Reset timing variables
         sessionStartTime = System.currentTimeMillis()
         lastTouchTime = 0L
         lastKeystrokeTime = 0L
         lastKeyupTimestamp = 0L
+        lastKeystrokeTimestamp = 0L // Reset native timing tracking
         currentTouchStartTime = 0L
         currentTouchStartX = 0f
         currentTouchStartY = 0f

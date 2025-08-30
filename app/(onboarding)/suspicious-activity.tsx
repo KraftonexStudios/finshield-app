@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { router } from 'expo-router';
 import type { AlertPayload } from '../../constants/API_ENDPOINTS';
-import { apiService } from '../../services/apiService';
+import { API_ENDPOINTS, buildApiUrl } from '../../constants/API_ENDPOINTS';
 import { useUserStore } from '../../stores/useUserStore';
 
 export default function SuspiciousActivityScreen() {
@@ -11,7 +12,7 @@ export default function SuspiciousActivityScreen() {
   const [reportSent, setReportSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { user, logout } = useUserStore();
+  const { user } = useUserStore();
 
   useEffect(() => {
     // Automatically send alert when component mounts
@@ -47,13 +48,22 @@ export default function SuspiciousActivityScreen() {
 
       console.log('Sending suspicious activity alert:', alertPayload);
 
-      // Send alert using API service
-      const result = await apiService.sendAlert(alertPayload);
+      // Send alert using direct fetch
+      const response = await fetch(buildApiUrl(API_ENDPOINTS.ALERT), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': alertPayload.userId,
+          'X-Alert-Type': alertPayload.alertType,
+        },
+        body: JSON.stringify(alertPayload),
+      });
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to send alert');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
+      const result = await response.json();
       console.log('Suspicious activity alert sent successfully:', result);
 
       setReportSent(true);
@@ -95,84 +105,97 @@ export default function SuspiciousActivityScreen() {
 
 
   return (
-    <SafeAreaView className="flex-1 bg-red-50">
-      <View className="flex-1 justify-center items-center px-6">
-        {/* Alert Icon */}
-        <View className="mb-8">
-          <View className="w-24 h-24 bg-red-100 rounded-full items-center justify-center mb-4">
-            <Text className="text-red-600 text-4xl">⚠️</Text>
+    <SafeAreaView className="flex-1 bg-zinc-950">
+      <View className="flex-1 px-6 py-8">
+        {/* Header Section */}
+        <View className="flex-1 justify-center items-center">
+          {/* Alert Icon */}
+          <View className="mb-12">
+            <View className="w-32 h-32 bg-red-600/20 border-2 border-red-500/30 rounded-full items-center justify-center">
+              <Text className="text-red-400 text-5xl">⚠️</Text>
+            </View>
+          </View>
+
+          {/* Main Content Card */}
+          <View className="bg-zinc-900/80 border border-zinc-800/60 p-8 rounded-3xl w-full max-w-md">
+            <Text className="text-red-400 text-center text-3xl font-bold mb-6">
+              Suspicious Activity Detected
+            </Text>
+
+            <Text className="text-zinc-300 text-center text-lg leading-7 mb-8">
+              For your security, we have detected unusual activity on your account.
+              Our security team has been notified and will review your account.
+            </Text>
+
+            {/* Status Messages */}
+            {isReporting && (
+              <View className="bg-blue-600/20 border border-blue-500/30 p-5 rounded-2xl mb-6">
+                <Text className="text-blue-400 text-center font-semibold text-base">
+                  🔄 Reporting suspicious activity...
+                </Text>
+              </View>
+            )}
+
+            {reportSent && (
+              <View className="bg-green-600/20 border border-green-500/30 p-5 rounded-2xl mb-6">
+                <Text className="text-green-400 text-center font-semibold text-base">
+                  ✅ Security team has been notified
+                </Text>
+              </View>
+            )}
+
+            {error && (
+              <View className="bg-red-600/20 border border-red-500/30 p-5 rounded-2xl mb-6">
+                <Text className="text-red-400 text-center font-semibold text-base mb-4">
+                  ❌ {error}
+                </Text>
+                <TouchableOpacity
+                  className="py-3 px-6 bg-red-600/40 border border-red-500/50 rounded-xl"
+                  onPress={sendSuspiciousActivityAlert}
+                >
+                  <Text className="text-red-300 text-center font-bold">
+                    Retry Alert
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <Text className="text-zinc-400 text-center text-base leading-6">
+              Your account access has been temporarily restricted for security purposes.
+            </Text>
           </View>
         </View>
 
-        {/* Main Content */}
-        <View className="bg-white p-6 rounded-2xl shadow-sm mb-8 w-full">
-          <Text className="text-red-600 text-center text-2xl font-bold mb-4">
-            Suspicious Activity Detected
-          </Text>
-
-          <Text className="text-gray-700 text-center text-base leading-6 mb-6">
-            For your security, we have detected unusual activity on your account.
-            Our security team has been notified and will review your account.
-          </Text>
-
-          {/* Status Messages */}
-          {isReporting && (
-            <View className="bg-blue-50 p-4 rounded-xl mb-4">
-              <Text className="text-blue-600 text-center font-medium">
-                🔄 Reporting suspicious activity...
+        {/* Bottom Action Section */}
+        <View className="pt-8">
+          {/* Action Buttons */}
+          <View className="space-y-4 mb-8">
+            <TouchableOpacity
+              className="bg-blue-600 py-5 px-8 rounded-2xl shadow-lg"
+              onPress={handleContactSupport}
+            >
+              <Text className="text-white text-center text-xl font-bold">
+                Contact Support
               </Text>
-            </View>
-          )}
+            </TouchableOpacity>
 
-          {reportSent && (
-            <View className="bg-green-50 p-4 rounded-xl mb-4">
-              <Text className="text-green-600 text-center font-medium">
-                ✅ Security team has been notified
+            <TouchableOpacity
+              className="bg-zinc-800/80 border border-zinc-700/60 py-5 px-8 rounded-2xl"
+              onPress={() => router.back()}
+            >
+              <Text className="text-zinc-200 text-center text-xl font-semibold">
+                Go Back
               </Text>
-            </View>
-          )}
+            </TouchableOpacity>
+          </View>
 
-          {error && (
-            <View className="bg-red-50 p-4 rounded-xl mb-4">
-              <Text className="text-red-600 text-center font-medium">
-                ❌ {error}
-              </Text>
-              <TouchableOpacity
-                className="mt-2 py-2 px-4 bg-red-100 rounded-lg"
-                onPress={sendSuspiciousActivityAlert}
-              >
-                <Text className="text-red-600 text-center font-semibold">
-                  Retry Alert
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <Text className="text-gray-600 text-center text-sm">
-            Your account access has been temporarily restricted for security purposes.
-          </Text>
-        </View>
-
-        {/* Action Buttons */}
-        <View className="w-full space-y-4">
-          <TouchableOpacity
-            className="bg-blue-600 py-4 rounded-xl"
-            onPress={handleContactSupport}
-          >
-            <Text className="text-white text-center font-semibold text-lg">
-              Contact Support
+          {/* Security Notice */}
+          <View className="bg-zinc-900/50 border border-zinc-800/40 p-6 rounded-2xl">
+            <Text className="text-zinc-400 text-center text-sm leading-5">
+              🔒 This security measure helps protect your account from unauthorized access.
+              If you believe this is an error, please contact our support team.
             </Text>
-          </TouchableOpacity>
-
-
-        </View>
-
-        {/* Security Notice */}
-        <View className="mt-8 px-4">
-          <Text className="text-gray-500 text-center text-xs">
-            🔒 This security measure helps protect your account from unauthorized access.
-            If you believe this is an error, please contact our support team.
-          </Text>
+          </View>
         </View>
       </View>
     </SafeAreaView>

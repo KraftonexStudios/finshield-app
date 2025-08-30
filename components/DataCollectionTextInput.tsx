@@ -77,22 +77,58 @@ const DataCollectionTextInput: React.FC<DataCollectionTextInputProps> = ({
 
     const currentTime = Date.now();
 
-    // Detect what character was added or removed
-    let newChar = '';
-    if (text.length > previousText.length) {
-      // Character was added - find the new character
-      for (let i = 0; i < text.length; i++) {
-        if (i >= previousText.length || text[i] !== previousText[i]) {
-          newChar = text[i];
-          break;
+    // Improved character detection algorithm
+    const detectChanges = (oldText: string, newText: string) => {
+      const changes: Array<{ type: 'insert' | 'delete'; character: string; position: number }> = [];
+
+      if (newText.length > oldText.length) {
+        // Character(s) were added - find all insertions
+        let oldIndex = 0;
+        let newIndex = 0;
+
+        while (newIndex < newText.length && oldIndex < oldText.length) {
+          if (newText[newIndex] === oldText[oldIndex]) {
+            oldIndex++;
+            newIndex++;
+          } else {
+            // Found an insertion
+            changes.push({
+              type: 'insert',
+              character: newText[newIndex],
+              position: newIndex
+            });
+            newIndex++;
+          }
+        }
+
+        // Handle remaining characters at the end
+        while (newIndex < newText.length) {
+          changes.push({
+            type: 'insert',
+            character: newText[newIndex],
+            position: newIndex
+          });
+          newIndex++;
+        }
+      } else if (newText.length < oldText.length) {
+        // Character(s) were deleted
+        const deletedCount = oldText.length - newText.length;
+        for (let i = 0; i < deletedCount; i++) {
+          changes.push({
+            type: 'delete',
+            character: 'Backspace',
+            position: -1 // Position not relevant for deletions
+          });
         }
       }
-    } else if (text.length < previousText.length) {
-      // Character was deleted - use 'Backspace' as the character
-      newChar = 'Backspace';
-    }
 
-    if (newChar && newChar !== '') {
+      return changes;
+    };
+
+    const changes = detectChanges(previousText, text);
+
+    // Process each change
+    for (const change of changes) {
       try {
         // Calculate approximate touch coordinates
         const x = inputLayout.x + (inputLayout.width / 2);
@@ -100,7 +136,7 @@ const DataCollectionTextInput: React.FC<DataCollectionTextInputProps> = ({
 
         // Send keyup event with actionValue=1 to complete the keystroke cycle
         await collectKeystroke({
-          character: newChar === ' ' ? 'Space' : newChar, // Normalize space character for better tracking
+          character: change.character === ' ' ? 'Space' : change.character,
           timestamp: currentTime,
           coordinate_x: x,
           coordinate_y: y,
@@ -110,12 +146,12 @@ const DataCollectionTextInput: React.FC<DataCollectionTextInputProps> = ({
           actionValue: 1 // Keyup event
         });
 
-        console.log(`🔵 DataCollectionTextInput - Keyup sent: ${newChar === ' ' ? 'Space' : newChar}`);
+        console.log(`🔵 DataCollectionTextInput - Keyup sent: ${change.character === ' ' ? 'Space' : change.character}`);
 
         lastKeystrokeTime.current = currentTime;
 
         if (onDataCollected) {
-          onDataCollected({ character: newChar, x, y, timestamp: currentTime });
+          onDataCollected({ character: change.character, x, y, timestamp: currentTime });
         }
       } catch (error) {
         console.warn('DataCollectionTextInput keyup error:', error);

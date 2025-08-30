@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "bakingapplication",
+    "name": "Sential",
     "slug": "banking-securities",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "bakingapplication",
+    "icon": "./assets/images/micon.png",
+    "scheme": "Sential",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -19,8 +19,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/logo.png",
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.viskar.code.bakingapplication",
@@ -83,10 +83,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon-inside.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000"
         }
       ],
       [

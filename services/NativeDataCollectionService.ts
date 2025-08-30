@@ -42,6 +42,11 @@ class NativeDataCollectionService {
   private isInitialized = false;
   private sessionActive = false;
   private sessionStartTime = Date.now();
+  private activeKeyPresses: Map<
+    string,
+    { timestamp: number; x: number; y: number; pressure?: number }
+  > = new Map();
+  private lastKeystrokeTimestamp = 0;
 
   /**
    * Initialize the native data collection service
@@ -94,6 +99,44 @@ class NativeDataCollectionService {
   }
 
   /**
+   * Track keydown event - stores coordinates and timestamp
+   */
+  async trackKeydown(keydownData: {
+    character: string;
+    timestamp: number;
+    x: number;
+    y: number;
+    pressure?: number;
+  }): Promise<boolean> {
+    if (!this.isInitialized || !this.sessionActive) {
+      console.warn(
+        "Data collection service not initialized or session inactive"
+      );
+      return false;
+    }
+
+    try {
+      // Store keydown data for dwell time calculation
+      this.activeKeyPresses.set(keydownData.character, {
+        timestamp: keydownData.timestamp,
+        x: keydownData.x,
+        y: keydownData.y,
+        pressure: keydownData.pressure,
+      });
+
+      // Call native module if available
+      if (DataCollection && DataCollection.trackKeydown) {
+        await DataCollection.trackKeydown(keydownData);
+      }
+
+      return true;
+    } catch (error) {
+      console.warn("Keydown tracking failed:", error);
+      return false;
+    }
+  }
+
+  /**
    * Collect touch event using native Kotlin module
    */
   async collectTouchEvent(touchData: {
@@ -134,14 +177,12 @@ class NativeDataCollectionService {
   /**
    * Collect keystroke event using native Kotlin module with simplified structure
    */
+  /**
+   * Collect keystroke on keyup event - calculates dwell time from stored keydown
+   */
   async collectKeystroke(keystrokeData: {
     character: string;
-    timestamp: number;
-    dwellTime: number;
-    flightTime: number;
-    coordinate_x: number;
-    coordinate_y: number;
-    pressure?: number;
+    timestamp: number; // keyup timestamp
   }): Promise<KeystrokeEventData | null> {
     if (!this.isInitialized || !this.sessionActive) {
       console.warn(
@@ -151,20 +192,55 @@ class NativeDataCollectionService {
     }
 
     try {
-      if (DataCollection && DataCollection.collectKeystrokeNative) {
-        const result =
-          await DataCollection.collectKeystrokeNative(keystrokeData);
+      // Get stored keydown data
+      const keydownData = this.activeKeyPresses.get(keystrokeData.character);
+      if (!keydownData) {
+        console.warn(
+          `No keydown data found for character: ${keystrokeData.character}`
+        );
+        return null;
+      }
+
+      // Calculate dwell time (keyup - keydown)
+      const dwellTime = keystrokeData.timestamp - keydownData.timestamp;
+
+      // Calculate flight time (time between this keydown and previous keyup)
+      const flightTime =
+        this.lastKeystrokeTimestamp > 0
+          ? keydownData.timestamp - this.lastKeystrokeTimestamp
+          : 0;
+
+      // Update last keystroke timestamp
+      this.lastKeystrokeTimestamp = keystrokeData.timestamp;
+
+      // Clean up stored keydown data
+      this.activeKeyPresses.delete(keystrokeData.character);
+
+      const processedKeystrokeData = {
+        character: keystrokeData.character,
+        timestamp: keystrokeData.timestamp,
+        dwellTime,
+        flightTime,
+        coordinate_x: keydownData.x,
+        coordinate_y: keydownData.y,
+        pressure: keydownData.pressure,
+      };
+
+      if (DataCollection && DataCollection.processKeystroke) {
+        const result = await DataCollection.processKeystroke(
+          processedKeystrokeData
+        );
         return result as KeystrokeEventData;
       } else {
-        // Web fallback - return simplified structure
+        // Web fallback - return calculated structure
         return {
-          timestamp: keystrokeData.timestamp || Date.now(),
+          timestamp: keystrokeData.timestamp,
           character: keystrokeData.character,
-          dwellTime: keystrokeData.dwellTime,
-          flightTime: keystrokeData.flightTime,
-          coordinate_x: keystrokeData.coordinate_x,
-          coordinate_y: keystrokeData.coordinate_y,
-          pressure: keystrokeData.pressure,
+          dwellTime,
+          flightTime,
+          coordinate_x: keydownData.x,
+          coordinate_y: keydownData.y,
+          pressure: keydownData.pressure,
         };
       }
     } catch (error) {
@@ -172,16 +248,7 @@ class NativeDataCollectionService {
         "Native keystroke collection failed, using fallback:",
         error
       );
-      // Web fallback - return simplified structure
-      return {
-        timestamp: keystrokeData.timestamp || Date.now(),
-        character: keystrokeData.character,
-        dwellTime: keystrokeData.dwellTime,
-        flightTime: keystrokeData.flightTime,
-        coordinate_x: keystrokeData.coordinate_x,
-        coordinate_y: keystrokeData.coordinate_y,
-        pressure: keystrokeData.pressure,
-      };
+      return null;
     }
   }
 
@@ -292,6 +359,9 @@ class NativeDataCollectionService {
       // Reset local session data
       this.sessionStartTime = Date.now();
       this.sessionActive = true;
+      // Clear keystroke tracking data
+      this.activeKeyPresses.clear();
+      this.lastKeystrokeTimestamp = 0;
       console.log("Session reset successfully");
       return true;
     } catch (error) {
@@ -299,6 +369,9 @@ class NativeDataCollectionService {
       // Fallback: just reset local data
       this.sessionStartTime = Date.now();
       this.sessionActive = true;
+      // Clear keystroke tracking data
+      this.activeKeyPresses.clear();
+      this.lastKeystrokeTimestamp = 0;
       console.log("Session reset successfully (fallback)");
       return true;
     }

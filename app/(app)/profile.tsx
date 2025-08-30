@@ -1,8 +1,9 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
-import { AlertTriangle, ArrowLeft, BarChart3, ChevronRight, CreditCard, HelpCircle, Lock, Settings, Upload } from 'lucide-react-native';
+import { AlertTriangle, BarChart3, ChevronRight, CreditCard, HelpCircle, Lock, LogOut, Settings, Share2, Upload, User } from 'lucide-react-native';
 import React, { useCallback } from 'react';
-import { Alert, Pressable, SafeAreaView, ScrollView, Share, Text, View } from 'react-native';
+import { Alert, Image, Pressable, SafeAreaView, ScrollView, Share, Text, View } from 'react-native';
 
 export default function ProfileScreen() {
   const { user, logout } = useUserStore();
@@ -43,11 +44,9 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black">
       {/* Header */}
-      <View className="px-6 py-4 border-b border-gray-800">
+      <View className="px-6 py-5 border-b border-zinc-800/50">
         <View className="flex-row items-center justify-between">
-          <Pressable onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
-            <ArrowLeft size={24} color="white" />
-          </Pressable>
+          <BackButton />
           <Text className="text-white text-lg font-bold">Profile</Text>
           <Pressable onPress={handleShareProfile} className="w-10 h-10 items-center justify-center">
             <Upload size={24} color="white" />
@@ -58,10 +57,18 @@ export default function ProfileScreen() {
       <ScrollView className="flex-1 px-6 py-6">
         {/* Profile Info */}
         <View className="items-center mb-8">
-          <View className="w-24 h-24 bg-purple-600 rounded-full items-center justify-center mb-4">
-            <Text className="text-white text-3xl font-bold">
-              {(user?.fullName || 'JD').split(' ').map(n => n[0]).join('').toUpperCase()}
-            </Text>
+          <View className="w-24 h-24 bg-purple-600 rounded-full items-center justify-center mb-4 overflow-hidden">
+            {user?.profile ? (
+              <Image
+                source={{ uri: user.profile }}
+                className="w-full h-full"
+                style={{ resizeMode: 'cover' }}
+              />
+            ) : (
+              <Text className="text-white text-3xl font-bold">
+                {(user?.fullName || 'JD').split(' ').map(n => n[0]).join('').toUpperCase()}
+              </Text>
+            )}
           </View>
           <Text className="text-white text-xl font-bold mb-2">
             {user?.fullName || 'User'}
@@ -91,11 +98,19 @@ export default function ProfileScreen() {
         </View>
 
         {/* Share Profile Section */}
-        <View className="bg-gray-900 rounded-2xl p-6 mb-6">
+        <View className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-6 mb-6">
           <Text className="text-white text-lg font-bold mb-4">Share Payment Details</Text>
           <View className="items-center py-4">
-            <View className="w-16 h-16 bg-purple-600 rounded-full items-center justify-center mb-4">
-              <Upload size={32} color="white" />
+            <View className="w-16 h-16 bg-zinc-900 border border-zinc-800/50 rounded-full items-center justify-center mb-4 overflow-hidden">
+              {/* {user?.profile ? (
+                <Image 
+                  source={{ uri: user.profile }} 
+                  className="w-full h-full" 
+                  style={{ resizeMode: 'cover' }}
+                />
+              ) : ( */}
+              <Upload size={32} color="#9333ea" />
+              {/* )} */}
             </View>
             <Text className="text-white font-medium text-center mb-2">
               Share Your Payment Information
@@ -117,7 +132,7 @@ export default function ProfileScreen() {
 
           <Pressable
             onPress={() => router.push('/(app)/my-card')}
-            className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between"
+            className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 flex-row items-center justify-between"
           >
             <View className="flex-row items-center">
               <CreditCard size={24} color="white" style={{ marginRight: 16 }} />
@@ -128,7 +143,7 @@ export default function ProfileScreen() {
 
           <Pressable
             onPress={() => router.push('/(app)/transactions')}
-            className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between"
+            className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 flex-row items-center justify-between"
           >
             <View className="flex-row items-center">
               <BarChart3 size={24} color="white" style={{ marginRight: 16 }} />
@@ -137,7 +152,7 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
-          <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
               <Settings size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Settings</Text>
@@ -145,7 +160,7 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
-          <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
               <Lock size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Security</Text>
@@ -153,7 +168,7 @@ export default function ProfileScreen() {
             <ChevronRight size={20} color="#9ca3af" />
           </Pressable>
 
-          <Pressable className="bg-gray-900 rounded-2xl p-4 flex-row items-center justify-between">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 flex-row items-center justify-between">
             <View className="flex-row items-center">
               <HelpCircle size={24} color="white" style={{ marginRight: 16 }} />
               <Text className="text-white font-medium">Help & Support</Text>

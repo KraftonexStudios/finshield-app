@@ -361,10 +361,16 @@ export const useUserStore = create<AuthState>()(
 
             // Set data collection scenario for first-time registration
             try {
-              const { startDataCollection, setUserId } =
+              const { startDataCollection, setUserId, stopDataCollection } =
                 require("@/stores/useDataCollectionStore").useDataCollectionStore.getState();
+
+              // Stop any existing collection and start fresh with correct scenario
+              await stopDataCollection();
               setUserId(userData.uid);
               await startDataCollection("first-time-registration");
+              console.log(
+                "🔄 Updated data collection scenario to: first-time-registration"
+              );
             } catch (error) {
               console.warn(
                 "Failed to start data collection for first-time registration:",
@@ -372,29 +378,31 @@ export const useUserStore = create<AuthState>()(
               );
             }
           } else if (hasPinSetup && hasSecurityQuestions) {
-            // Existing user reregistering - redirect to PIN auth for login
+            // Existing user reregistering - go directly to PIN authentication
             set({
-              onboardingStep: "completed",
-              onboardingComplete: true,
+              onboardingStep: "completed", // Go directly to PIN auth
+              onboardingComplete: false, // Keep false until PIN verification
+              isAuthenticated: false, // Keep false until PIN verification
             });
 
-            // Set data collection scenario for re-registration before navigation
+            // Set data collection scenario for re-registration
             try {
-              const { startDataCollection, setUserId } =
+              const { startDataCollection, setUserId, stopDataCollection } =
                 require("@/stores/useDataCollectionStore").useDataCollectionStore.getState();
+
+              // Stop any existing collection and start fresh with correct scenario
+              await stopDataCollection();
               setUserId(userData.uid);
               await startDataCollection("re-registration");
+              console.log(
+                "🔄 Updated data collection scenario to: re-registration"
+              );
             } catch (error) {
               console.warn(
                 "Failed to start data collection for re-registration:",
                 error
               );
             }
-
-            // Use router to navigate to login PIN screen
-            setTimeout(() => {
-              require("expo-router").router.replace("/(auth)/pin-auth");
-            }, 100);
           } else if (hasPinSetup && !hasSecurityQuestions) {
             // User has PIN but no security questions
             set({ onboardingStep: "security-questions" });
@@ -520,6 +528,37 @@ export const useUserStore = create<AuthState>()(
         }
       },
 
+      // New function to complete re-registration after security questions verification
+      completeReRegistration: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const { user } = get();
+          if (!user) {
+            throw new Error("No user found");
+          }
+
+          // Now authenticate the user after successful security verification
+          set({
+            onboardingComplete: true,
+            onboardingStep: "completed",
+            isAuthenticated: true, // Set authentication to true after security verification
+          });
+
+          console.log(
+            "✅ Re-registration completed successfully for user:",
+            user.uid
+          );
+        } catch (error) {
+          console.error("Error completing re-registration:", error);
+          set({
+            error: "Failed to complete re-registration. Please try again.",
+          });
+          throw error;
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
       login: async () => {
         set({ isLoading: true, error: null });
         try {
@@ -546,7 +585,7 @@ export const useUserStore = create<AuthState>()(
           // Clear persisted Zustand storage
           await secureStorage.removeItem("user-storage");
 
-          // Clear user session and reset state
+          // Clear user session and reset state (including clearing temporary PIN)
           set({
             isAuthenticated: false,
             user: null,
@@ -698,12 +737,30 @@ export const useUserStore = create<AuthState>()(
           // Validate PIN with Firebase first
           const isValidPin = await firebaseService.validatePin(user.uid, pin);
           if (isValidPin) {
-            // Store credentials locally for future quick login
-            await get().storeUserCredentials(
-              user.uid,
-              pin,
-              user.biometricEnabled || false
-            );
+            // Check if this is a re-registration scenario
+            let isReRegistration = false;
+            try {
+              const { collectionScenario } =
+                require("@/stores/useDataCollectionStore").useDataCollectionStore.getState();
+              isReRegistration = collectionScenario === "re-registration";
+            } catch (error) {
+              console.warn("Failed to check collection scenario:", error);
+            }
+
+            // Store credentials based on scenario
+            if (!isReRegistration) {
+              // Normal login - store full credentials
+              await get().storeUserCredentials(
+                user.uid,
+                pin,
+                user.biometricEnabled || false
+              );
+            } else {
+              // Re-registration - store PIN temporarily in store (not secure storage)
+              // Will be persisted to secure storage only after complete flow success
+              set({ pin: pin });
+              console.log("🔄 Stored PIN temporarily for re-registration flow");
+            }
 
             // Update last login timestamp
             await firebaseService.updateLastLogin(user.uid);
@@ -924,6 +981,11 @@ export const useUserStore = create<AuthState>()(
             "biometricEnabled",
             biometricEnabled.toString()
           );
+
+          // Clear temporary PIN from store after successful storage
+          set({ pin: "" });
+
+          console.log("✅ User credentials stored securely");
         } catch (error) {
           console.error("Error storing user credentials:", error);
           throw error;

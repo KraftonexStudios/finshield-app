@@ -1,7 +1,7 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ArrowLeft, Fingerprint, Lock, Sparkles, User } from 'lucide-react-native';
+import { Fingerprint, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, SafeAreaView, Text, View } from 'react-native';
 
@@ -154,139 +154,80 @@ export default function BiometricSetupScreen() {
   const hasAvailableOptions = availableOptions.length > 0;
 
   return (
-    <LinearGradient
-      colors={['#1a1a2e', '#16213e', '#0f3460']}
-      className="flex-1"
-    >
-      <SafeAreaView className="flex-1 bg-black">
-        <View className="flex-1 px-8 py-8">
+    <SafeAreaView className="flex-1 bg-zinc-950">
+      <View className="flex-1 max-w-md mx-auto w-full">
+        <View className="flex-1 px-6 py-12">
           {/* Header */}
-          <View className="mb-12">
-            <Pressable
-              onPress={() => router.back()}
-              className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mb-8"
-            >
-              <ArrowLeft size={24} color="white" />
-            </Pressable>
+          <View className="mb-20">
+            <BackButton className="mb-16" />
 
-            <Text className="text-3xl font-bold text-white mb-3">
-              Secure Your Account
+            <Text className="text-xl font-semibold text-white mb-3 text-center">
+              Add a layer of security
             </Text>
-            <Text className="text-white/70 text-lg leading-6">
-              {hasAvailableOptions
-                ? 'Choose your preferred biometric authentication method'
-                : 'Biometric authentication is not available on this device'
-              }
+            <Text className="text-white/50 text-sm leading-5 text-center px-8">
+              Use face or touch scanning for enhanced security and faster verification process to protect your account
             </Text>
           </View>
 
           {/* Biometric Options */}
-          {hasAvailableOptions ? (
-            <View className="flex-1">
-              <Text className="text-white text-xl font-semibold mb-6">
-                Choose Authentication Method
-              </Text>
-
-              {availableOptions.map((option) => (
+          <View className="flex-1 mb-12">
+            <View className="flex-row gap-4">
+              {biometricOptions.map((option) => (
                 <Pressable
                   key={option.type}
                   onPress={() => {
                     setSelectedType(option.type);
                     handleBiometricSetup(option.type);
                   }}
-                  className={`bg-white/5 rounded-2xl p-6 mb-4 border ${selectedType === option.type ? 'border-white/40 bg-white/10' : 'border-white/10'
-                    }`}
-                  disabled={isLoading}
+                  className={`flex-1 bg-zinc-800/50 rounded-xl p-6 border border-zinc-700/30 ${selectedType === option.type ? 'bg-zinc-700/50' : 'bg-zinc-800/50'
+                    } ${!option.available ? 'opacity-50' : ''}`}
+                  disabled={isLoading || !option.available}
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.8 : 1,
                   })}
                 >
-                  <View className="flex-row items-center">
-                    <View className="mr-4">
-                      <option.icon size={48} color="white" />
+                  <View className="flex-col items-center text-center">
+                    <View className="w-12 h-12 bg-white/10 rounded-lg items-center justify-center mb-3">
+                      <option.icon size={24} color="white" />
                     </View>
-                    <View className="flex-1">
-                      <Text className="text-xl font-semibold text-white mb-1">
+                    <View>
+                      <Text className="text-white text-center text-sm font-medium mb-1">
                         {option.title}
                       </Text>
-                      <Text className="text-white/70 text-sm">
-                        {option.description}
+                      <Text className="text-white/50 text-xs text-center leading-4">
+                        {option.type === 'face' ? 'Quick & secure' : 'Touch to unlock'}
                       </Text>
-                    </View>
-                    <View className="w-6 h-6 rounded-full border-2 border-white/30 items-center justify-center">
-                      {selectedType === option.type && (
-                        <View className="w-3 h-3 rounded-full bg-white" />
-                      )}
                     </View>
                   </View>
                 </Pressable>
               ))}
+            </View>
+          </View>
 
-              {/* Benefits Section */}
-              <View className="bg-white/5 rounded-2xl p-5 mt-6 border border-white/10">
-                <View className="flex-row items-center mb-2">
-                  <Sparkles size={16} color="white" style={{ marginRight: 8 }} />
-                  <Text className="text-white text-sm font-semibold">
-                    Benefits of Biometric Authentication
-                  </Text>
-                </View>
-                <Text className="text-white/70 text-sm leading-5">
-                  • Faster and more convenient login{"\n"}
-                  • Enhanced security for your account{"\n"}
-                  • No need to remember your PIN every time{"\n"}
-                  • Works even when offline
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View className="flex-1 justify-center items-center">
-              <Lock size={96} color="white" style={{ marginBottom: 24 }} />
-              <Text className="text-xl font-semibold text-white mb-2 text-center">
-                Biometric Not Available
-              </Text>
-              <Text className="text-white/70 text-center mb-8 leading-6">
-                Your device doesn't support biometric authentication or it's not set up.
-                You can still use your PIN to access the app securely.
-              </Text>
-            </View>
-          )}
+
 
           {/* Action Buttons */}
-          <View className="mt-8">
-            {hasAvailableOptions && (
-              <Pressable
-                onPress={() => handleSkipBiometric()}
-                className="bg-white/10 rounded-2xl py-4 px-6 mb-4 border border-white/20"
-                disabled={isLoading}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.8 : 1,
-                })}
-              >
-                <Text className="text-center text-lg font-semibold text-white">
-                  {isLoading ? 'Setting up...' : 'Skip for Now'}
-                </Text>
-              </Pressable>
-            )}
-
+          <View className="mt-auto">
             <Pressable
-              onPress={() => handleSkipBiometric()}
-              className="bg-white rounded-2xl py-4 px-6"
+              onPress={handleSkipBiometric}
               disabled={isLoading}
+              className="w-full bg-white/90 rounded-xl py-3.5 px-6"
               style={({ pressed }) => ({
                 opacity: pressed ? 0.8 : 1,
               })}
             >
-              <Text className="text-center text-lg font-semibold text-gray-900">
-                {hasAvailableOptions ? 'Continue with PIN Only' : 'Continue'}
+              <Text className="text-center text-base font-medium text-black">
+                {isLoading ? 'Setting up...' : 'Setup Biometric'}
               </Text>
             </Pressable>
 
-            <Text className="text-white/50 text-xs text-center mt-4">
-              You can change these settings anytime in the app
+            <Text className="text-white/30 text-xs text-center mt-4">
+              You can set this later in settings
             </Text>
           </View>
         </View>
-      </SafeAreaView>
-    </LinearGradient>
+
+      </View>
+    </SafeAreaView>
   );
 }

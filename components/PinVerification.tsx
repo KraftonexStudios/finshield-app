@@ -140,13 +140,13 @@ export default function PinVerification({
 
   const renderPinDots = () => {
     return (
-      <View className="flex-row justify-center space-x-4 mb-8">
+      <View className="flex-row justify-center gap-4 mb-8">
         {[0, 1, 2, 3].map((index) => (
           <View
             key={index}
-            className={`w-4 h-4 rounded-full border-2 ${index < pin.length
-              ? (error ? 'bg-red-500 border-red-500' : 'bg-purple-500 border-purple-500')
-              : 'border-gray-400'
+            className={`w-4 h-4 rounded-full ${index < pin.length
+              ? (error ? 'bg-red-500' : 'bg-green-400')
+              : 'bg-zinc-700'
               } ${isValidating && index < pin.length ? 'animate-pulse' : ''}`}
           />
         ))}
@@ -198,9 +198,10 @@ export default function PinVerification({
     ];
 
     return (
-      <View className="space-y-4">
+      <View className="gap-4">
+
         {numbers.map((row, rowIndex) => (
-          <View key={rowIndex} className="flex-row justify-center space-x-8">
+          <View key={rowIndex} className="flex-row justify-center gap-4">
             {row.map((number, colIndex) => (
               <Pressable
                 key={colIndex}
@@ -218,12 +219,15 @@ export default function PinVerification({
                   }
                 }}
                 className={`w-16 h-16 rounded-full items-center justify-center ${number === '' ? '' : number === '👆' ?
-                  (isBiometricSupported && !isLocked ? 'bg-purple-600 active:bg-purple-700' : 'bg-gray-600') :
-                  (isLocked || isValidating ? 'bg-gray-800 opacity-50' : 'bg-gray-800 active:bg-gray-700')
+                  (isBiometricSupported && !isLocked ? 'bg-zinc-900/70 border border-zinc-800/50' : 'bg-zinc-700') :
+                  (isLocked || isValidating ? 'bg-zinc-700 opacity-50' : 'bg-zinc-900/70 border border-zinc-800/50')
                   }`}
                 disabled={isLocked || (number === '⌫' && pin.length === 0) || (isValidating && number !== '⌫')}
+                style={({ pressed }) => ({
+                  opacity: pressed ? 0.7 : 1,
+                })}
               >
-                <Text className={`text-xl font-medium ${number === '👆' ? 'text-white' : 'text-white'
+                <Text className={`text-xl font-medium ${isLocked ? 'text-zinc-500' : 'text-white'
                   }`}>
                   {number}
                 </Text>
@@ -243,14 +247,14 @@ export default function PinVerification({
       onRequestClose={handleClose}
     >
       <View className="flex-1 bg-black/50 justify-end">
-        <View className="bg-black rounded-t-3xl p-6 pb-8">
+        <View className="bg-zinc-950 rounded-t-3xl p-6 pb-8">
           {/* Header */}
           <View className="items-center mb-8">
-            <View className="w-12 h-1 bg-gray-600 rounded-full mb-6" />
+            <View className="w-12 h-1 bg-zinc-600 rounded-full mb-6" />
             <Text className="text-white text-xl font-bold mb-2">
               {isLocked ? 'Account Temporarily Locked' : title}
             </Text>
-            <Text className="text-gray-400 text-center mb-2">
+            <Text className="text-zinc-400 text-center mb-2">
               {isLocked
                 ? `Please wait ${lockTimeRemaining} seconds before trying again`
                 : subtitle
@@ -268,8 +272,8 @@ export default function PinVerification({
             )}
             {isValidating && (
               <View className="flex-row justify-center items-center">
-                <View className="w-2 h-2 bg-purple-500 rounded-full mr-2" />
-                <Text className="text-purple-400 text-sm">Validating...</Text>
+                <View className="w-2 h-2 bg-green-400 rounded-full mr-2" />
+                <Text className="text-green-400 text-sm">Validating...</Text>
               </View>
             )}
           </View>
@@ -284,16 +288,19 @@ export default function PinVerification({
           <Pressable
             onPress={handleClose}
             className="mt-6 py-4"
+            style={({ pressed }) => ({
+              opacity: pressed ? 0.7 : 1,
+            })}
           >
-            <Text className="text-gray-400 text-center font-medium">
+            <Text className="text-zinc-400 text-center font-medium">
               Cancel
             </Text>
           </Pressable>
 
           {/* Demo Hint and Status */}
-          <View className="mt-4 p-3 bg-gray-900 rounded-xl">
+          {/* <View className="mt-4 p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/30">
             {!isLocked ? (
-              <Text className="text-gray-400 text-xs text-center">
+              <Text className="text-zinc-400 text-xs text-center">
                 Demo PIN: 1234 {isBiometricSupported ? `| 👆 ${biometricType}` : '| Biometric not available'}
               </Text>
             ) : (
@@ -301,7 +308,7 @@ export default function PinVerification({
                 🔒 Account locked due to multiple failed attempts
               </Text>
             )}
-          </View>
+          </View> */}
         </View>
       </View>
     </Modal>

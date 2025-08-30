@@ -1,5 +1,7 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
+import { ArchiveX, ArrowDown, ArrowUp } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -10,11 +12,13 @@ export default function TransactionsScreen() {
 
   useEffect(() => {
     fetchTransactions();
+
   }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchTransactions();
+
     setRefreshing(false);
   };
 
@@ -55,17 +59,15 @@ export default function TransactionsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black">
       {/* Header */}
-      <View className="px-6 py-4 border-b border-gray-800">
+      <View className="px-6 py-6  border-b  border-zinc-800/50">
         <View className="flex-row items-center justify-between mb-4">
-          <Pressable onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
-            <Text className="text-white text-xl">←</Text>
-          </Pressable>
+          <BackButton />
           <Text className="text-white text-lg font-bold">Transactions</Text>
           <View className="w-10" />
         </View>
 
         {/* Filter Tabs */}
-        <View className="flex-row bg-gray-900 rounded-xl p-1">
+        <View className="flex-row bg-zinc-900/70 border border-zinc-800/50 rounded-xl p-1">
           {(['all', 'sent', 'received'] as const).map((filterType) => (
             <Pressable
               key={filterType}
@@ -91,8 +93,11 @@ export default function TransactionsScreen() {
       >
         {Object.keys(groupedTransactions).length === 0 ? (
           <View className="items-center justify-center py-12">
-            <View className="w-16 h-16 bg-gray-800 rounded-full items-center justify-center mb-4">
-              <Text className="text-gray-400 text-2xl">📄</Text>
+            <View className="w-16 h-16 bg-zinc-900/70 border border-zinc-800/50 rounded-full items-center justify-center mb-4">
+              <View className="w-8 h-8 bg-zinc-700/50 rounded-full items-center justify-center">
+                {/* <Text className="text-gray-400 text-lg">📄</Text> */}
+                <ArchiveX color="white" size={24} />
+              </View>
             </View>
             <Text className="text-gray-400 text-base mb-2">No transactions yet</Text>
             <Text className="text-gray-500 text-sm text-center">
@@ -115,7 +120,7 @@ export default function TransactionsScreen() {
                       pathname: '/(app)/transaction-details',
                       params: { transactionId: transaction.id }
                     })}
-                    className="bg-gray-900 rounded-2xl p-4 mb-3"
+                    className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4 mb-3"
                   >
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-center flex-1">
@@ -123,7 +128,8 @@ export default function TransactionsScreen() {
                           }`}>
                           <Text className={`text-xl ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
                             }`}>
-                            {transaction.type === 'credit' ? '↓' : '↑'}
+                            {transaction.type === 'credit' ? <ArrowDown size={18} color="#4ade80" /> :
+                              <ArrowUp size={18} color="#f87171" />}
                           </Text>
                         </View>
                         <View className="flex-1">

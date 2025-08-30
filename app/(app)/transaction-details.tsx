@@ -1,6 +1,7 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, CheckCircle, ChevronRight, Clock, Share2, XCircle } from 'lucide-react-native';
+import { CheckCircle, ChevronRight, Clock, Share2, XCircle } from 'lucide-react-native';
 import React from 'react';
 import { Pressable, SafeAreaView, ScrollView, Share, Text, View } from 'react-native';
 
@@ -32,17 +33,15 @@ export default function TransactionDetailsScreen() {
   if (!transaction) {
     return (
       <SafeAreaView className="flex-1 bg-black">
-        <View className="px-6 py-5 border-b border-gray-800">
+        <View className="px-6 py-6 border-b border-zinc-800/50">
           <View className="flex-row items-center justify-between">
-            <Pressable onPress={() => router.back()} className="w-12 h-12 items-center justify-center rounded-full">
-              <ArrowLeft size={24} color="white" />
-            </Pressable>
+            <BackButton />
             <Text className="text-white text-lg font-bold">Transaction Details</Text>
             <View className="w-12" />
           </View>
         </View>
         <View className="flex-1 items-center justify-center px-6">
-          <View className="w-16 h-16 bg-gray-800 rounded-full items-center justify-center mb-4">
+          <View className="w-16 h-16 bg-zinc-900/70 border border-zinc-800/50 rounded-full items-center justify-center mb-4">
             <XCircle size={32} color="#9ca3af" />
           </View>
           <Text className="text-white font-medium text-center mb-2">Transaction Not Found</Text>
@@ -63,11 +62,9 @@ export default function TransactionDetailsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black">
       {/* Header */}
-      <View className="px-6 py-5 border-b border-gray-800">
+      <View className="px-6 py-5 border-b border-zinc-800/50">
         <View className="flex-row items-center justify-between">
-          <Pressable onPress={() => router.back()} className="w-12 h-12 items-center justify-center rounded-full">
-            <ArrowLeft size={24} color="white" />
-          </Pressable>
+          <BackButton />
           <Text className="text-white text-lg font-bold">Transaction Details</Text>
           <Pressable onPress={handleShare} className="w-12 h-12 items-center justify-center rounded-full">
             <Share2 size={24} color="white" />
@@ -75,10 +72,14 @@ export default function TransactionDetailsScreen() {
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-6 py-6" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1 px-6 py-6"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
         {/* Status */}
         <View className="items-center mb-8">
-          <View className="w-20 h-20 bg-gray-800 rounded-full items-center justify-center mb-4">
+          <View className="w-20 h-20 bg-zinc-900/70 border border-zinc-800/50 rounded-full items-center justify-center mb-4">
             {getStatusIcon()}
           </View>
           <Text className={`text-2xl font-bold mb-2 ${transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'}`}>
@@ -90,7 +91,7 @@ export default function TransactionDetailsScreen() {
         </View>
 
         {/* Transaction Details */}
-        <View className="bg-gray-900 rounded-2xl p-6 mb-8">
+        <View className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-6 mb-8">
           <Text className="text-white text-lg font-bold mb-4">Details</Text>
           {[
             { label: 'Description', value: transaction.description },
@@ -115,7 +116,7 @@ export default function TransactionDetailsScreen() {
           ].map((item, i, arr) => (
             <View
               key={i}
-              className={`py-3 ${i < arr.length - 1 ? 'border-b border-gray-800' : ''}`}
+              className={`py-3 ${i < arr.length - 1 ? 'border-b border-zinc-800/50' : ''}`}
             >
               <Text className="text-gray-400 mb-1">{item.label}</Text>
               <Text className="text-white font-medium">{item.value}</Text>
@@ -124,7 +125,7 @@ export default function TransactionDetailsScreen() {
         </View>
 
         {/* Actions */}
-        <View className="flex flex-col gap-2">
+        <View className="flex flex-col gap-3 mt-4">
 
           <Pressable
             onPress={handleShare}
@@ -135,14 +136,14 @@ export default function TransactionDetailsScreen() {
 
           <Pressable
             onPress={() => router.push('/(app)/send-money')}
-            className="bg-gray-800 rounded-2xl py-4"
+            className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl py-4"
           >
             <Text className="text-white font-medium text-center">Send Money</Text>
           </Pressable>
 
           <Pressable
             onPress={() => router.push('/(app)/transactions')}
-            className="bg-gray-800 rounded-2xl py-4 flex-row items-center justify-center"
+            className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl py-4 flex-row items-center justify-center"
           >
             <Text className="text-white font-medium">View All Transactions</Text>
             <ChevronRight size={18} color="#9ca3af" style={{ marginLeft: 8 }} />

@@ -2,15 +2,17 @@ import { TouchTrackingWrapper } from '@/components/TouchTrackingWrapper';
 import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import { useUserStore } from '@/stores/useUserStore';
 import { router } from 'expo-router';
-import { ArrowDown, ArrowDownToLine, ArrowUp, BarChart3, CreditCard, Eye, EyeOff, Send, User } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { AppState, Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { ArrowDownToLine, BarChart3, CreditCard, Eye, EyeOff, Send, User } from 'lucide-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppState, Image, Pressable, RefreshControl, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
 export default function DashboardScreen() {
-  const { user, transactions, fetchTransactions, subscribeToTransactions, subscribeToBalance, refreshUserData } = useUserStore();
+  const { user, transactions, fetchTransactions, subscribeToTransactions, subscribeToBalance, refreshUserData, findUserByMobile } = useUserStore();
   const { startSession, startDataCollection, handleAppStateChange, collectionScenario, currentSession } = useDataCollectionStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [balanceVisible, setBalanceVisible] = useState(true);
+  const [transactionUsers, setTransactionUsers] = useState<Record<string, any>>({});
+  const hasDataBeenSentRef = useRef(false);
 
   useEffect(() => {
     // Subscribe to real-time updates
@@ -25,27 +27,28 @@ export default function DashboardScreen() {
   }, []);
 
   useEffect(() => {
+    const sendDataOnce = async (reason: string) => {
+      if (hasDataBeenSentRef.current) {
+        console.log(`🔴 Data already sent, skipping ${reason}`);
+        return;
+      }
+
+      try {
+        console.log(`🔴 Sending data due to: ${reason}`);
+        await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
+        hasDataBeenSentRef.current = true;
+      } catch (error) {
+        console.log(`🔴 Failed to send data on ${reason}:`, error);
+      }
+    };
+
     // Handle app state changes for data collection
     const handleAppStateChangeWrapper = (nextAppState: string) => {
       handleAppStateChange(nextAppState);
 
       // Send data when app goes to background (only if sufficient data collected)
       if (nextAppState === 'background' && collectionScenario === 'login') {
-        const sendDataOnBackground = async () => {
-          try {
-            // Wait at least 30 seconds before sending data to ensure meaningful collection
-            const { sessionStartTime, touchEvents, motionPatterns, keystrokes, sessionId } = useDataCollectionStore.getState();
-            const sessionDuration = Date.now() - (sessionStartTime || 0);
-            const hasMinimumData = touchEvents.length > 5 || motionPatterns.length > 3;
-
-            // Always send data when app goes to background regardless of quality
-            // Use proper session handling with endSessionAndSendData
-            await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
-          } catch (error) {
-            // Failed to send data on background
-          }
-        };
-        sendDataOnBackground();
+        sendDataOnce('app background');
       }
     };
 
@@ -53,37 +56,71 @@ export default function DashboardScreen() {
 
     return () => {
       subscription?.remove();
+      // Only send data on unmount if it's a login scenario and data hasn't been sent yet
+      if (collectionScenario === 'login') {
+        sendDataOnce('component unmount');
+      }
     };
   }, [collectionScenario]);
-
-  useEffect(() => {
-    // Cleanup data collection when component unmounts
-    return () => {
-      const cleanup = async () => {
-        if (collectionScenario === 'login') {
-          try {
-            // Only send data if we have collected for a reasonable duration
-            const { sessionStartTime, touchEvents, motionPatterns, keystrokes, sessionId } = useDataCollectionStore.getState();
-            const sessionDuration = Date.now() - (sessionStartTime || 0);
-            const hasMinimumData = touchEvents.length > 5 || motionPatterns.length > 3;
-
-            // Always send data on app closure regardless of quality
-            // End session properly and send data to server
-            await useDataCollectionStore.getState().endSessionAndSendData('/api/data/regular');
-            // Note: endSessionAndSendData handles both ending session and sending data
-          } catch (error) {
-            // Failed to send data on cleanup
-          }
-        }
-      };
-      cleanup();
-    };
-  }, []);
 
 
 
   // Get recent transactions from store (limit to 3 for dashboard)
   const recentTransactions = transactions.slice(0, 3);
+
+  // Load user data for transactions
+  useEffect(() => {
+    const loadTransactionUsers = async () => {
+      const userCache: Record<string, any> = {};
+
+      for (const transaction of recentTransactions) {
+        const otherUserMobile = transaction.type === 'credit' ? transaction.fromMobile : transaction.toMobile;
+
+        if (otherUserMobile && otherUserMobile !== user?.mobile && !userCache[otherUserMobile]) {
+          try {
+            const otherUser = await findUserByMobile(otherUserMobile);
+            if (otherUser) {
+              userCache[otherUserMobile] = otherUser;
+            }
+          } catch (error) {
+            console.log('Failed to load user for mobile:', otherUserMobile);
+          }
+        }
+      }
+
+      setTransactionUsers(userCache);
+    };
+
+    if (recentTransactions.length > 0) {
+      loadTransactionUsers();
+    }
+  }, [recentTransactions, user?.mobile]);
+
+  // Helper function to get user avatar
+  const getUserAvatar = (transaction: any) => {
+    const otherUserMobile = transaction.type === 'credit' ? transaction.fromMobile : transaction.toMobile;
+    const otherUser = transactionUsers[otherUserMobile];
+
+    if (otherUser?.profile) {
+      return (
+        <Image
+          source={{ uri: otherUser.profile }}
+          className="w-full h-full rounded-full"
+          style={{ resizeMode: 'cover' }}
+        />
+      );
+    }
+
+    // Generate avatar from name
+    const displayName = otherUser?.fullName || transaction.recipient?.name || 'Unknown';
+    const initials = displayName.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2);
+
+    return (
+      <View className="w-full h-full rounded-full bg-purple-600/30 items-center justify-center">
+        <Text className="text-white text-sm font-bold">{initials}</Text>
+      </View>
+    );
+  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -137,7 +174,7 @@ export default function DashboardScreen() {
           }
         >
           {/* Header */}
-          <View className="px-6 py-10">
+          <View className="px-6 py-8">
             <View className="flex-row justify-between items-center mb-8">
               <View>
                 <Text className="text-gray-400 text-sm">Good Morning</Text>
@@ -145,9 +182,17 @@ export default function DashboardScreen() {
               </View>
               <Pressable
                 onPress={() => router.push('/(app)/profile')}
-                className="w-10 h-10 bg-gray-800 rounded-full items-center justify-center"
+                className="w-10 h-10 bg-zinc-900/70 border border-zinc-800/50 rounded-full items-center justify-center overflow-hidden"
               >
-                <User size={20} color="white" />
+                {user?.profile ? (
+                  <Image
+                    source={{ uri: user.profile }}
+                    className="w-full h-full"
+                    style={{ resizeMode: 'cover' }}
+                  />
+                ) : (
+                  <User size={20} color="white" />
+                )}
               </Pressable>
             </View>
 
@@ -165,7 +210,7 @@ export default function DashboardScreen() {
                 </Text>
                 <Pressable
                   onPress={() => setBalanceVisible(!balanceVisible)}
-                  className="ml-3 bg-gray-800 rounded-full p-2"
+                  className="ml-3 bg-zinc-900/70 border border-zinc-800/50 rounded-full p-2"
                 >
                   {balanceVisible ? <Eye size={16} color="white" /> : <EyeOff size={16} color="white" />}
                 </Pressable>
@@ -177,22 +222,22 @@ export default function DashboardScreen() {
             </View>
 
             {/* Action Buttons */}
-            <View className="flex-row justify-center space-x-4 mb-8">
+            <View className="flex-row justify-center  gap-2 mb-8">
               <Pressable
                 onPress={() => router.push('/(app)/send-money')}
-                className="bg-gray-800 rounded-full px-6 py-3"
+                className="bg-zinc-900/70 border border-zinc-800/50 rounded-full px-6 py-3"
               >
                 <Text className="text-white font-medium">Send</Text>
               </Pressable>
               <Pressable
                 onPress={() => router.push('/(app)/request-money')}
-                className="bg-gray-800 rounded-full px-6 py-3"
+                className="bg-zinc-900/70 border border-zinc-800/50 rounded-full px-6 py-3"
               >
                 <Text className="text-white font-medium">Request</Text>
               </Pressable>
               <Pressable
                 onPress={() => router.push('/(app)/more-services')}
-                className="bg-gray-800 rounded-full px-6 py-3"
+                className="bg-zinc-900/70 border border-zinc-800/50 rounded-full px-6 py-3"
               >
                 <Text className="text-white font-medium">More</Text>
               </Pressable>
@@ -217,7 +262,7 @@ export default function DashboardScreen() {
 
               <Pressable
                 onPress={() => router.push('/(app)/request-money')}
-                className="bg-gray-900 rounded-2xl p-6 flex-1 ml-2 items-center"
+                className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-6 flex-1 ml-2 items-center"
               >
                 <View className="w-12 h-12 bg-purple-500/20 rounded-full items-center justify-center mb-2">
                   <ArrowDownToLine size={24} color="#a855f7" />
@@ -259,8 +304,8 @@ export default function DashboardScreen() {
                 </View>
               </Pressable>
             ) : (
-              <View className="bg-gray-700/50 rounded-2xl p-6 items-center border-2 border-dashed border-gray-600 mb-4">
-                <View className="w-12 h-12 bg-gray-600 rounded-full items-center justify-center mb-3">
+              <View className="bg-zinc-900/70 border-2 border-dashed border-zinc-800/50 rounded-2xl p-6 items-center mb-4">
+                <View className="w-12 h-12 bg-zinc-700/50 rounded-full items-center justify-center mb-3">
                   <CreditCard size={24} color="#9ca3af" />
                 </View>
                 <Text className="text-white font-medium text-center mb-2">
@@ -288,15 +333,11 @@ export default function DashboardScreen() {
             {recentTransactions.length > 0 ? (
               <View className="space-y-3 gap-2">
                 {recentTransactions.map((transaction, index) => (
-                  <View key={transaction.id} className="bg-gray-900 rounded-2xl p-4">
+                  <View key={transaction.id} className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4">
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-center flex-1">
-                        <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${transaction.type === 'credit' ? 'bg-green-500/20' : 'bg-red-500/20'
-                          }`}>
-                          {transaction.type === 'credit' ?
-                            <ArrowDown size={18} color="#4ade80" /> :
-                            <ArrowUp size={18} color="#f87171" />
-                          }
+                        <View className="w-10 h-10 rounded-full mr-3 overflow-hidden">
+                          {getUserAvatar(transaction)}
                         </View>
                         <View className="flex-1">
                           <Text className="text-white font-medium">
@@ -333,8 +374,8 @@ export default function DashboardScreen() {
                 ))}
               </View>
             ) : (
-              <View className="bg-gray-800/50 rounded-2xl p-8 items-center">
-                <View className="w-16 h-16 bg-gray-700 rounded-full items-center justify-center mb-4">
+              <View className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-8 items-center">
+                <View className="w-16 h-16 bg-zinc-700/50 rounded-full items-center justify-center mb-4">
                   <BarChart3 size={32} color="#9ca3af" />
                 </View>
                 <Text className="text-white font-medium text-center mb-2">

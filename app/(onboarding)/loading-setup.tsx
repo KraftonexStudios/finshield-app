@@ -1,13 +1,11 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { API_ENDPOINTS } from '../../constants/API_ENDPOINTS';
 import { useDataCollectionStore } from '../../stores/useDataCollectionStore';
 import { useUserStore } from '../../stores/useUserStore';
-
-
 
 const LOADING_MESSAGES = [
   'Setting up your dashboard...',
@@ -19,7 +17,7 @@ const LOADING_MESSAGES = [
 export default function LoadingSetupScreen() {
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
   const { user } = useUserStore();
   const {
@@ -47,7 +45,7 @@ export default function LoadingSetupScreen() {
         await new Promise(resolve => setTimeout(resolve, 6000));
 
         // Determine endpoint based on scenario
-        let endpoint: string;
+        let endpoint;
         if (collectionScenario === 'first-time-registration') {
           endpoint = API_ENDPOINTS.DATA.REGULAR;
         } else if (collectionScenario === 're-registration') {
@@ -154,18 +152,18 @@ export default function LoadingSetupScreen() {
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-white">
-        <View className="flex-1 justify-center items-center px-6">
-          <View className="bg-red-50 p-6 rounded-2xl mb-8 w-full">
-            <Text className="text-red-600 text-center text-lg font-semibold mb-2">
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+          <View style={{ backgroundColor: '#7F1D1D', padding: 24, borderRadius: 16, marginBottom: 32, width: '100%' }}>
+            <Text style={{ color: '#DC2626', textAlign: 'center', fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
               Setup Failed
             </Text>
-            <Text className="text-red-500 text-center mb-4">
+            <Text style={{ color: '#EF4444', textAlign: 'center', marginBottom: 16 }}>
               {error}
             </Text>
-            <View className="bg-white p-4 rounded-xl">
+            <View style={{ backgroundColor: 'black', padding: 16, borderRadius: 12 }}>
               <Text
-                className="text-blue-600 text-center font-semibold text-lg"
+                style={{ color: '#10B981', textAlign: 'center', fontWeight: '600', fontSize: 18 }}
                 onPress={handleRetry}
               >
                 Try Again
@@ -178,52 +176,40 @@ export default function LoadingSetupScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <View className="flex-1 justify-center items-center px-6">
-        {/* Logo or App Icon */}
-        <View className="mb-12">
-          <View className="w-20 h-20 bg-blue-600 rounded-full items-center justify-center mb-4">
-            <Text className="text-white text-2xl font-bold">B</Text>
-          </View>
-          <Text className="text-gray-700 text-center text-lg font-semibold">
-            Banking App
-          </Text>
-        </View>
-
-        {/* Loading Animation */}
-        <View className="mb-8">
-          <ActivityIndicator size="large" color="#2563eb" />
-        </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
 
         {/* Dynamic Loading Message */}
-        <View className="bg-white p-6 rounded-2xl shadow-sm mb-8 w-full">
-          <Text className="text-gray-800 text-center text-lg font-medium">
+        <View style={{ marginBottom: 64, height: 32, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#D1D5DB', textAlign: 'center', fontSize: 18, fontWeight: '500', letterSpacing: 0.5 }}>
             {LOADING_MESSAGES[currentMessageIndex]}
           </Text>
         </View>
 
         {/* Progress Indicator */}
-        <View className="w-full px-4">
-          <View className="flex-row justify-between mb-2">
+        <View style={{ width: '100%', maxWidth: 288, alignSelf: 'center' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
             {LOADING_MESSAGES.map((_, index) => (
               <View
                 key={index}
-                className={`h-2 flex-1 mx-1 rounded-full ${index <= currentMessageIndex ? 'bg-blue-600' : 'bg-gray-200'
-                  }`}
+                style={{
+                  height: 4,
+                  flex: 1,
+                  borderRadius: 2,
+                  backgroundColor: index <= currentMessageIndex ? '#10B981' : '#374151',
+                  shadowColor: index <= currentMessageIndex ? '#10B981' : 'transparent',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowOpacity: 0.5,
+                  shadowRadius: 2,
+                }}
               />
             ))}
           </View>
-          <Text className="text-gray-500 text-center text-sm">
+          <Text style={{ color: '#9CA3AF', textAlign: 'center', fontSize: 14, fontWeight: '300' }}>
             Please wait while we set up your secure banking experience
           </Text>
         </View>
 
-        {/* Security Notice */}
-        <View className="mt-8 px-4">
-          <Text className="text-gray-400 text-center text-xs">
-            🔒 Your data is being processed securely
-          </Text>
-        </View>
       </View>
     </SafeAreaView>
   );

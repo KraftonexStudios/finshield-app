@@ -1,8 +1,8 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import {
-  ArrowLeft,
   Award,
   BarChart3,
   Building2,
@@ -238,14 +238,15 @@ export default function MoreServicesScreen() {
           <Pressable
             key={service.id}
             onPress={() => handleServicePress(service)}
-            className="bg-white/5 rounded-2xl p-4 border border-white/10 flex-1 min-w-[45%] relative"
+            className="bg-zinc-900/70 rounded-2xl p-4 border border-zinc-800/50 flex-1 min-w-[45%] relative"
             style={({ pressed }) => ({
               opacity: pressed ? 0.7 : 1,
             })}
           >
             {service.comingSoon && (
-              <View className="absolute top-2 right-2 bg-yellow-500 px-2 py-1 rounded-full">
-                <Text className="text-black text-xs font-bold">Soon</Text>
+              <View className="absolute top-2 right-2 bg-red-500 px-1 py-1/2 rounded-full">
+
+                <Text className="text-black text-[8px] font-bold">soon</Text>
               </View>
             )}
             <View className={`w-12 h-12 ${service.color} rounded-full items-center justify-center mb-3`}>
@@ -268,22 +269,17 @@ export default function MoreServicesScreen() {
       colors={['#1a1a2e', '#16213e', '#0f3460']}
       className="flex-1"
     >
-      <SafeAreaView className="flex-1">
+      <SafeAreaView className="flex-1 bg-black">
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-          <View className="flex-1 px-6 py-4">
+          <View className="flex-1 px-6 py-6">
             {/* Header */}
             <View className="flex-row items-center mb-8">
-              <Pressable
-                onPress={() => router.back()}
-                className="w-12 h-12 rounded-full bg-white/10 items-center justify-center mr-4"
-              >
-                <ArrowLeft size={24} color="white" />
-              </Pressable>
+              <BackButton className="mr-4" />
               <Text className="text-2xl font-bold text-white">More Services</Text>
             </View>
 
             {/* User Welcome */}
-            <View className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-2xl p-6 mb-8 border border-white/10">
+            <View className="bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-2xl p-6 mb-8 border border-zinc-800/50">
               <Text className="text-white text-lg font-semibold mb-2">
                 Welcome, {user?.fullName || 'User'}!
               </Text>
@@ -295,38 +291,43 @@ export default function MoreServicesScreen() {
             {/* Quick Actions */}
             <View className="mb-8">
               <Text className="text-white text-xl font-bold mb-4">Quick Actions</Text>
-              <View className="flex-row gap-3">
+              <View className="flex-row gap-3 justify-between">
                 <Pressable
                   onPress={() => router.push('/(app)/send-money')}
-                  className="bg-white/10 rounded-2xl p-4 flex-1 items-center"
+                  className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4  items-center flex gap-2 flex-row"
+
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Send size={32} color="white" />
-                  <Text className="text-white font-medium text-center">Send Money</Text>
+                  <Send size={20} color="white" />
+                  <Text className="text-white text-base font-bold">Send</Text>
+
                 </Pressable>
 
                 <Pressable
-                  onPress={() => router.push('/(app)/request-money')}
-                  className="bg-white/10 rounded-2xl p-4 flex-1 items-center"
+                  onPress={() => router.push('/(app)/send-money')}
+                  className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4  items-center flex gap-2 flex-row"
+
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <DollarSign size={32} color="white" />
-                  <Text className="text-white font-medium text-center">Request Money</Text>
+                  <DollarSign size={20} color="white" />
+                  <Text className="text-white text-base font-bold">Request</Text>
+
                 </Pressable>
 
                 <Pressable
-                  onPress={() => router.push('/(app)/transactions')}
-                  className="bg-white/10 rounded-2xl p-4 flex-1 items-center"
+                  onPress={() => router.push('/(app)/send-money')}
+                  className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4  items-center flex gap-2 flex-row"
+
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <BarChart3 size={32} color="white" />
-                  <Text className="text-white font-medium text-center">Transactions</Text>
+                  <BarChart3 size={20} color="white" />
+                  <Text className="text-white text-base font-bold">History</Text>
                 </Pressable>
               </View>
             </View>
@@ -339,7 +340,7 @@ export default function MoreServicesScreen() {
             {renderServiceSection('Utility Services', utilityServices)}
 
             {/* Help & Support */}
-            <View className="bg-white/5 rounded-2xl p-6 mb-8 border border-white/10">
+            <View className="bg-zinc-900/70 rounded-2xl p-6 mb-8 border border-zinc-800/50">
               <Text className="text-white text-lg font-semibold mb-4">Need Help?</Text>
               <View className="space-y-3">
                 <Pressable
@@ -393,7 +394,7 @@ export default function MoreServicesScreen() {
             </View>
 
             {/* App Info */}
-            <View className="bg-white/5 rounded-2xl p-6 border border-white/10">
+            <View className="bg-zinc-900/70 rounded-2xl p-6 border border-zinc-800/50">
               <Text className="text-white text-lg font-semibold mb-2">SecureBank Mobile</Text>
               <Text className="text-white/60 text-sm mb-4">
                 Your trusted banking partner with cutting-edge security and user-friendly features.

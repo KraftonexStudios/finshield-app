@@ -1,5 +1,5 @@
+import { BackButton } from '@/components/ui/BackButton';
 import { useUserStore } from '@/stores/useUserStore';
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Dimensions, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 
@@ -37,11 +37,9 @@ export default function MyCardScreen() {
   return (
     <SafeAreaView className="flex-1 bg-black">
       {/* Header */}
-      <View className="px-6 py-4 border-b border-gray-800">
+      <View className="px-6 py-6 border-b  border-zinc-800/50">
         <View className="flex-row items-center justify-between">
-          <Pressable onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
-            <Text className="text-white text-xl">←</Text>
-          </Pressable>
+          <BackButton />
           <Text className="text-white text-lg font-bold">My Card</Text>
           <View className="w-10" />
         </View>
@@ -120,12 +118,12 @@ export default function MyCardScreen() {
         </View>
 
         {/* Card Details */}
-        <View className="bg-gray-900 rounded-2xl p-6 mb-6">
+        <View className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-6 mb-6">
           <Text className="text-white text-lg font-bold mb-4">Card Details</Text>
 
           <View className="space-y-4">
             {/* Card Number */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-800">
+            <View className="flex-row justify-between items-center py-3 border-b border-zinc-800/50">
               <Text className="text-gray-400">Card Number</Text>
               <Pressable onPress={() => setShowCardNumber(!showCardNumber)}>
                 <Text className="text-white font-mono">
@@ -135,7 +133,7 @@ export default function MyCardScreen() {
             </View>
 
             {/* PIN */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-800">
+            <View className="flex-row justify-between items-center py-3 border-b border-zinc-800/50">
               <Text className="text-gray-400">PIN</Text>
               <Pressable onPress={() => setShowPin(!showPin)} className="flex-row items-center">
                 <Text className="text-white font-mono mr-2">
@@ -148,13 +146,13 @@ export default function MyCardScreen() {
             </View>
 
             {/* CVV */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-800">
+            <View className="flex-row justify-between items-center py-3 border-b border-zinc-800/50">
               <Text className="text-gray-400">CVV</Text>
               <Text className="text-white font-mono">•••</Text>
             </View>
 
             {/* Expiry Date */}
-            <View className="flex-row justify-between items-center py-3 border-b border-gray-800">
+            <View className="flex-row justify-between items-center py-3 border-b border-zinc-800/50">
               <Text className="text-gray-400">Expiry Date</Text>
               <Text className="text-white font-medium">{cardData.expiryDate}</Text>
             </View>
@@ -173,15 +171,15 @@ export default function MyCardScreen() {
             <Text className="text-white font-medium text-center">Block Card</Text>
           </Pressable>
 
-          <Pressable className="bg-gray-800 rounded-2xl p-4">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4">
             <Text className="text-white font-medium text-center">Change PIN</Text>
           </Pressable>
 
-          <Pressable className="bg-gray-800 rounded-2xl p-4">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4">
             <Text className="text-white font-medium text-center">Card Settings</Text>
           </Pressable>
 
-          <Pressable className="bg-gray-800 rounded-2xl p-4">
+          <Pressable className="bg-zinc-900/70 border border-zinc-800/50 rounded-2xl p-4">
             <Text className="text-white font-medium text-center">Transaction Limits</Text>
           </Pressable>
         </View>

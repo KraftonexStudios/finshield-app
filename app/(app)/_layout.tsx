@@ -17,15 +17,8 @@ export default function AppLayout() {
         <Stack.Screen name="settings" />
         <Stack.Screen name="send-money" />
         <Stack.Screen name="request-money" />
-        <Stack.Screen name="bill-payment" />
-        <Stack.Screen name="recharge" />
         <Stack.Screen name="more-services" />
-        <Stack.Screen name="transfer-confirmation" />
-        <Stack.Screen name="transfer-success" />
-        <Stack.Screen name="beneficiary-list" />
-        <Stack.Screen name="add-beneficiary" />
         <Stack.Screen name="transaction-details" />
-        <Stack.Screen name="data-analytics" />
       </Stack>
     </>
   );

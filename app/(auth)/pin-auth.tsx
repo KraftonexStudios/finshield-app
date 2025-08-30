@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Delete, Fingerprint, ShieldUser } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, SafeAreaView, Text, Vibration, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Pressable, SafeAreaView, Text, Vibration, View } from 'react-native';
 import { pinAttemptService } from '../../services/pinAttemptService';
 import { useDataCollectionStore } from '../../stores/useDataCollectionStore';
 import { useUserStore } from '../../stores/useUserStore';
@@ -17,19 +17,71 @@ try {
 export default function PinAuthScreen() {
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const { loginWithPin, loginWithBiometric, user } = useUserStore();
   const { startDataCollection, startSession, collectionScenario } = useDataCollectionStore();
 
-  // Initialize biometricAvailable based on collection scenario to prevent glitch
-  const [biometricAvailable, setBiometricAvailable] = useState(collectionScenario !== 're-registration');
+  // Initialize biometricAvailable - always false for re-registration to prevent glitch
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [remainingAttempts, setRemainingAttempts] = useState(3);
+
+  // Animation refs for PIN dots
+  const bounceAnim = useRef(new Animated.Value(1)).current;
+  const [authSuccess, setAuthSuccess] = useState(false);
+
+  // Animation functions
+  const startBounceAnimation = () => {
+    setIsAuthenticating(true);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: 1.2,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
+  const stopBounceAnimation = (success: boolean = false) => {
+    bounceAnim.stopAnimation();
+    setIsAuthenticating(false);
+    setAuthSuccess(success);
+
+    if (success) {
+      // Reset animation value and show success state briefly
+      Animated.timing(bounceAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Reset animation value
+      Animated.timing(bounceAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   useEffect(() => {
     checkBiometricAvailability();
     checkPinAttemptStatus();
   }, [collectionScenario, user?.biometricEnabled]);
+
+  // Debug logging for collection scenario changes
+  useEffect(() => {
+    console.log('🔍 PIN Auth - Collection Scenario:', collectionScenario);
+    console.log('🔍 PIN Auth - Biometric Available:', biometricAvailable);
+  }, [collectionScenario, biometricAvailable]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -63,13 +115,17 @@ export default function PinAuthScreen() {
   };
 
   const checkBiometricAvailability = async () => {
-    if (!LocalAuthentication) {
+    console.log('🔍 Checking biometric availability - Scenario:', collectionScenario);
+
+    // Always disable biometric during re-registration phase - no exceptions
+    if (collectionScenario === 're-registration') {
+      console.log('🚫 Biometric disabled for re-registration scenario');
       setBiometricAvailable(false);
       return;
     }
 
-    // Disable biometric during re-registration phase
-    if (collectionScenario === 're-registration') {
+    if (!LocalAuthentication) {
+      console.log('🚫 LocalAuthentication not available');
       setBiometricAvailable(false);
       return;
     }
@@ -77,9 +133,13 @@ export default function PinAuthScreen() {
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      setBiometricAvailable(hasHardware && isEnrolled && user?.biometricEnabled);
+      const biometricEnabled = user?.biometricEnabled;
+      const shouldEnable = hasHardware && isEnrolled && biometricEnabled;
+
+      console.log('🔍 Biometric check - Hardware:', hasHardware, 'Enrolled:', isEnrolled, 'User enabled:', biometricEnabled, 'Final:', shouldEnable);
+      setBiometricAvailable(shouldEnable);
     } catch (error) {
-      // Error checking biometric availability
+      console.log('❌ Error checking biometric availability:', error);
       setBiometricAvailable(false);
     }
   };
@@ -101,23 +161,25 @@ export default function PinAuthScreen() {
   const handleBiometricAuth = async () => {
     try {
       setIsLoading(true);
+      startBounceAnimation();
       const success = await loginWithBiometric();
 
       if (success && user) {
-        // Start data collection session after successful biometric verification
-        try {
-          await startSession(user.uid);
-          await startDataCollection('login');
-        } catch (dataCollectionError) {
-          // Failed to start data collection
-          // Don't block login flow if data collection fails
-        }
+        // Stop animation and show success
+        stopBounceAnimation(true);
 
-        router.replace('../(app)/dashboard');
+        // Brief delay to show success state
+        setTimeout(() => {
+          // Data collection already started in auth layout
+
+          router.replace('../(app)/dashboard');
+        }, 800);
       } else {
+        stopBounceAnimation(false);
         Alert.alert('Authentication Failed', 'Please try using your PIN instead.');
       }
     } catch (error) {
+      stopBounceAnimation(false);
       Alert.alert('Authentication Error', 'Please try again');
     } finally {
       setIsLoading(false);
@@ -137,10 +199,16 @@ export default function PinAuthScreen() {
     }
 
     if (pin.length < 4) {
+      // Reset success state when starting new PIN entry
+      if (authSuccess) {
+        setAuthSuccess(false);
+      }
+
       const newPin = pin + digit;
       setPin(newPin);
 
       if (newPin.length === 4) {
+        startBounceAnimation();
         verifyPin(newPin);
       }
     }
@@ -152,28 +220,30 @@ export default function PinAuthScreen() {
     try {
       const success = await loginWithPin(enteredPin);
       if (success && user) {
+        // Stop animation and show success
+        stopBounceAnimation(true);
+
         // Record successful attempt
         await pinAttemptService.recordSuccessfulAttempt();
         await updateRemainingAttempts();
 
-        // Check if this is a re-registration scenario
-        if (collectionScenario === 're-registration') {
-          // Navigate to captcha verification for additional behavioral data collection
-          router.push('../(onboarding)/captcha-verification');
+        // Brief delay to show success state
+        setTimeout(async () => {
+          // Check if this is a re-registration scenario
+          if (collectionScenario === 're-registration') {
+            // Navigate to captcha verification for additional behavioral data collection
+            router.push('../(onboarding)/captcha-verification');
 
-        } else {
-          // Regular login - start data collection session for login scenario
-          try {
-            await startSession(user.uid);
-            await startDataCollection('login');
-          } catch (dataCollectionError) {
-            // Failed to start data collection
-            // Don't block login flow if data collection fails
+          } else {
+            // Data collection already started in auth layout
+
+            router.replace('../(app)/dashboard');
           }
-
-          router.replace('../(app)/dashboard');
-        }
+        }, 800);
       } else {
+        // Stop animation and show failure
+        stopBounceAnimation(false);
+
         // Record failed attempt
         const attemptResult = await pinAttemptService.recordFailedAttempt();
         await updateRemainingAttempts();
@@ -208,16 +278,32 @@ export default function PinAuthScreen() {
 
   const handleDelete = () => {
     setPin(pin.slice(0, -1));
+    // Reset success state when deleting PIN
+    if (authSuccess) {
+      setAuthSuccess(false);
+    }
   };
 
   const renderPinDots = () => {
+    const getDotColor = (index: number) => {
+      if (authSuccess && pin.length > index) {
+        return 'bg-green-500';
+      } else if (pin.length > index) {
+        return 'bg-green-400';
+      } else {
+        return 'bg-zinc-700';
+      }
+    };
+
     return (
       <View className="flex-row justify-center items-center mb-12">
         {[0, 1, 2, 3].map((index) => (
-          <View
+          <Animated.View
             key={index}
-            className={`w-4 h-4 rounded-full mx-3 ${pin.length > index ? 'bg-green-400' : 'bg-gray-700'
-              }`}
+            style={{
+              transform: [{ scale: isAuthenticating ? bounceAnim : 1 }],
+            }}
+            className={`w-4 h-4 rounded-full mx-3 ${getDotColor(index)}`}
           />
         ))}
       </View>
@@ -229,7 +315,7 @@ export default function PinAuthScreen() {
       ['1', '2', '3'],
       ['4', '5', '6'],
       ['7', '8', '9'],
-      ['', '0', 'delete'],
+      ['biometric', '0', 'delete'],
     ];
 
     return (
@@ -237,8 +323,24 @@ export default function PinAuthScreen() {
         {keys.map((row, rowIndex) => (
           <View key={rowIndex} className="flex-row justify-center mb-4">
             {row.map((key, keyIndex) => {
-              if (key === '') {
-                return <View key={keyIndex} className="w-20 h-20 mx-4" />;
+              if (key === 'biometric') {
+                // Explicitly disable biometric during re-registration - double check
+                const shouldShowBiometric = biometricAvailable && !isBlocked && collectionScenario !== 're-registration';
+                return shouldShowBiometric ? (
+                  <Pressable
+                    key={keyIndex}
+                    onPress={handleBiometricAuth}
+                    disabled={isLoading}
+                    className="w-20 h-20 mx-4 rounded-full items-center justify-center bg-zinc-900/70 border border-zinc-800/50"
+                    style={({ pressed }) => ({
+                      opacity: pressed ? 0.7 : 1,
+                    })}
+                  >
+                    <Fingerprint size={24} color="#4ade80" />
+                  </Pressable>
+                ) : (
+                  <View key={keyIndex} className="w-20 h-20 mx-4" />
+                );
               }
 
               if (key === 'delete') {
@@ -249,7 +351,7 @@ export default function PinAuthScreen() {
                     disabled={pin.length === 0 || isBlocked}
                     className="w-20 h-20 mx-4 items-center justify-center"
                   >
-                    <Delete size={24} color={pin.length === 0 || isBlocked ? '#4b5563' : 'white'} />
+                    <Delete size={24} color={pin.length === 0 || isBlocked ? '#71717a' : 'white'} />
                   </Pressable>
                 );
               }
@@ -259,13 +361,13 @@ export default function PinAuthScreen() {
                   key={keyIndex}
                   onPress={() => handlePinInput(key)}
                   disabled={isLoading || isBlocked}
-                  className={`w-20 h-20 mx-4 rounded-full items-center justify-center ${isBlocked ? 'bg-gray-700' : 'bg-gray-800'
+                  className={`w-20 h-20 mx-4 rounded-full items-center justify-center ${isBlocked ? 'bg-zinc-700' : 'bg-zinc-900/70 border border-zinc-800/50'
                     }`}
                   style={({ pressed }) => ({
                     opacity: pressed ? 0.7 : 1,
                   })}
                 >
-                  <Text className={`text-2xl font-medium ${isBlocked ? 'text-gray-500' : 'text-white'
+                  <Text className={`text-2xl font-medium ${isBlocked ? 'text-zinc-500' : 'text-white'
                     }`}>{key}</Text>
                 </Pressable>
               );
@@ -277,7 +379,7 @@ export default function PinAuthScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-black">
+    <SafeAreaView className="flex-1 bg-zinc-950">
       <View className="flex-1 px-6 py-8">
         {/* Header */}
         <View className="items-center mb-12 mt-8">
@@ -296,13 +398,13 @@ export default function PinAuthScreen() {
               <Text className="text-red-400 text-base text-center mb-2">
                 Too many failed attempts
               </Text>
-              <Text className="text-gray-400 text-sm text-center">
+              <Text className="text-zinc-400 text-sm text-center">
                 Please wait {pinAttemptService.formatTimeRemaining(remainingTime)} before trying again
               </Text>
             </View>
           ) : (
             <View className="items-center">
-              <Text className="text-gray-400 text-base text-center">
+              <Text className="text-zinc-400 text-base text-center">
                 Enter your 4-digit PIN to access your account
               </Text>
               {remainingAttempts < 3 && (
@@ -322,23 +424,7 @@ export default function PinAuthScreen() {
         {renderPinDots()}
         {renderKeypad()}
 
-        {biometricAvailable && !isBlocked && (
-          <View className="items-center mt-8">
-            <Pressable
-              onPress={handleBiometricAuth}
-              disabled={isLoading}
-              className="items-center"
-              style={({ pressed }) => ({
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <View className="w-16 h-16 bg-gray-800 rounded-full items-center justify-center mb-2">
-                <Fingerprint size={32} color="#4ade80" />
-              </View>
-              <Text className="text-gray-400 text-sm">Use Biometric</Text>
-            </Pressable>
-          </View>
-        )}
+
 
         {/* Forgot PIN */}
         <View className="items-center mt-6">
@@ -346,7 +432,7 @@ export default function PinAuthScreen() {
             onPress={handleForgotPin}
             className="py-3 px-6"
           >
-            <Text className="text-gray-400 text-base font-medium underline">
+            <Text className="text-zinc-400 text-base font-medium underline">
               Forgot PIN?
             </Text>
           </Pressable>

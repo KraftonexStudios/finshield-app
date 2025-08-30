@@ -92,11 +92,68 @@ export default function SecurityQuestionsVerificationScreen() {
         });
         await performPostSecurityAnalysis(user.uid);
 
-        Alert.alert(
-          'Verification Successful',
-          `Your identity has been verified successfully. (${validationResult.correctAnswers}/${validationResult.totalQuestions} correct)`,
-          [{ text: 'Continue', onPress: () => router.replace('/(app)/dashboard') }]
-        );
+        // Check if this is re-registration flow
+        const { collectionScenario } = useDataCollectionStore.getState();
+
+        if (collectionScenario === 're-registration') {
+          // For re-registration, complete the authentication process and store credentials
+          Alert.alert(
+            'Verification Successful',
+            `Your identity has been verified successfully. (${validationResult.correctAnswers}/${validationResult.totalQuestions} correct)`,
+            [{
+              text: 'Continue',
+              onPress: async () => {
+                try {
+                  // Store user credentials after successful security verification
+                  const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+                  if (tempPin && user?.uid) {
+                    await storeUserCredentials(
+                      user.uid,
+                      tempPin,
+                      user.biometricEnabled || false
+                    );
+                    console.log('✅ User credentials stored after security verification');
+                  }
+
+                  router.replace('/(app)/dashboard');
+                } catch (error) {
+                  console.error('Failed to complete re-registration:', error);
+                  setError('Failed to complete registration. Please try again.');
+                }
+              }
+            }]
+          );
+        } else {
+          // For first-time registration, also store credentials
+          Alert.alert(
+            'Verification Successful',
+            `Your identity has been verified successfully. (${validationResult.correctAnswers}/${validationResult.totalQuestions} correct)`,
+            [{
+              text: 'Continue',
+              onPress: async () => {
+                try {
+                  // Store user credentials after successful security verification
+                  const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+                  if (tempPin && user?.uid) {
+                    await storeUserCredentials(
+                      user.uid,
+                      tempPin,
+                      user.biometricEnabled || false
+                    );
+                    console.log('✅ User credentials stored after security verification');
+                  }
+
+                  router.replace('/(app)/dashboard');
+                } catch (error) {
+                  console.error('Failed to complete registration:', error);
+                  setError('Failed to complete registration. Please try again.');
+                }
+              }
+            }]
+          );
+        }
       } else {
         const newAttempts = attempts + 1;
         setAttempts(newAttempts);
@@ -143,21 +200,21 @@ export default function SecurityQuestionsVerificationScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-black">
+      <SafeAreaView className="flex-1 bg-zinc-950">
         <View className="flex-1 justify-center items-center">
-          <Text className="text-gray-400 text-lg">Loading security questions...</Text>
+          <Text className="text-zinc-400 text-lg">Loading security questions...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-black">
+    <SafeAreaView className="flex-1 bg-zinc-950">
       <ScrollView className="flex-1 px-6 py-8">
         {/* Header */}
-        <View className="mb-8">
+        <View className="mb-8 ">
           <Text className="text-2xl font-bold text-white mb-2">Security Verification</Text>
-          <Text className="text-gray-400 text-base leading-6">
+          <Text className="text-zinc-400 text-base leading-6">
             For your security, please answer the following questions to verify your identity.
           </Text>
           {attempts > 0 && (
@@ -167,7 +224,7 @@ export default function SecurityQuestionsVerificationScreen() {
 
         {/* Error Message */}
         {error && (
-          <View className="bg-red-900/40 p-4 rounded-xl mb-6">
+          <View className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-6">
             <Text className="text-red-400 text-center font-medium">{error}</Text>
           </View>
         )}
@@ -180,9 +237,9 @@ export default function SecurityQuestionsVerificationScreen() {
                 {index + 1}. {getQuestionText(question.id)}
               </Text>
               <DataCollectionTextInput
-                className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-4 text-white text-base"
+                className="bg-zinc-900/70 border border-zinc-800/50 rounded-xl px-4 py-4 text-white text-base"
                 placeholder="Enter your answer"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor="#a1a1aa"
                 value={answers[question.id] || ''}
                 onChangeText={(text) => handleAnswerChange(question.id, text)}
                 autoCapitalize="none"
@@ -198,20 +255,23 @@ export default function SecurityQuestionsVerificationScreen() {
         {/* Verify Button */}
         <TouchableOpacity
           className={`py-4 rounded-xl mb-6 ${isVerifying || Object.keys(answers).length < userSecurityQuestions.length
-            ? 'bg-gray-700'
-            : 'bg-green-500'
+            ? 'bg-zinc-800/50 border border-zinc-700/50'
+            : 'bg-zinc-100'
             }`}
           onPress={verifyAnswers}
           disabled={isVerifying || Object.keys(answers).length < userSecurityQuestions.length}
         >
-          <Text className="text-white text-center font-semibold text-lg">
+          <Text className={`text-center font-semibold text-lg ${isVerifying || Object.keys(answers).length < userSecurityQuestions.length
+            ? 'text-zinc-500'
+            : 'text-zinc-900'
+            }`}>
             {isVerifying ? 'Verifying...' : 'Verify Identity'}
           </Text>
         </TouchableOpacity>
 
         {/* Security Notice */}
-        <View className="bg-gray-800 p-4 rounded-xl">
-          <Text className="text-gray-300 text-sm text-center">
+        <View className="bg-zinc-900/70 border border-zinc-800/50 p-4 rounded-xl">
+          <Text className="text-zinc-300 text-sm text-center">
             🔒 Your answers are encrypted and stored securely. This verification helps protect your
             account from unauthorized access.
           </Text>

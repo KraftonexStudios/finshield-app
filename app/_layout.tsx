@@ -7,8 +7,8 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { TouchTrackingWrapper } from '@/components/TouchTrackingWrapper';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { nativeDataCollectionService } from '@/services/NativeDataCollectionService';
 import { useDataCollectionStore } from '@/stores/useDataCollectionStore';
 import './global.css';
@@ -67,7 +67,7 @@ export default function RootLayout() {
         } catch (error) {
           // Failed to end data collection store session
         }
-        
+
         // End native data collection service session
         try {
           nativeDataCollectionService.endSession();
@@ -75,7 +75,7 @@ export default function RootLayout() {
           // Failed to end native data collection service session
         }
       };
-      
+
       endDataCollectionSession();
     };
   }, []);
