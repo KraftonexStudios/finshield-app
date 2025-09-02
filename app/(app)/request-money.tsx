@@ -277,7 +277,8 @@ export default function RequestMoneyScreen() {
                         placeholderTextColor="#71717A"
                         className="text-white text-base"
                         keyboardType="phone-pad"
-                        maxLength={15}
+                        maxLength={25000}
+                        numberOfLines={2000}
                         inputType="mobile"
                       />
                     </View>
@@ -348,7 +349,7 @@ export default function RequestMoneyScreen() {
                   className="text-white text-base"
                   multiline
                   numberOfLines={2}
-                  maxLength={100}
+                  maxLength={25000}
                   inputType="text"
                 />
               </View>

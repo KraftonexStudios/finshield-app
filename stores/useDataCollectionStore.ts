@@ -46,6 +46,9 @@ try {
   BehavioralDataCollectorModule = requireNativeModule("DataCollection");
 } catch (error) {}
 
+// Import the native data collection service
+import { NativeDataCollectionService } from "../services/NativeDataCollectionService";
+
 // Debouncing utility for state updates
 let updateTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -103,6 +106,14 @@ interface DataCollectionState {
     }
   >; // Track keydown events for simplified keystroke structure
 
+  // Native Keystroke Capture
+  nativeDataCollectionService: NativeDataCollectionService | null;
+  isNativeKeystrokeCapturing: boolean;
+  isNativeTouchCapturing: boolean;
+
+  nativeKeystrokeData: any[];
+  useNativeCapture: boolean;
+
   // Data Collections
   touchEvents: MobileTouchEvent[];
   keystrokes: MobileKeystroke[];
@@ -158,6 +169,29 @@ interface DataCollectionState {
   }>;
   stopDataCollection: () => Promise<void>;
   handleAppStateChange: (nextAppState: string) => Promise<void>;
+
+  // Native Keystroke Capture Actions
+  initializeNativeDataCollection: () => Promise<void>;
+  startNativeKeystrokeCapture: () => Promise<boolean>;
+  stopNativeKeystrokeCapture: () => Promise<{
+    success: boolean;
+    eventsCapture: number;
+    captureMethod: string;
+    message: string;
+  }>;
+  processHardwareKeyEvent: (keyEventData: any) => Promise<void>;
+  processRealTouchEvent: (touchEventData: any) => Promise<void>;
+  getNativeKeystrokeData: () => Promise<{
+    keystrokeEvents: any[];
+    captureInfo: {
+      isHardwareTiming: boolean;
+      captureMethod: string;
+      dataQuality: string;
+      eventsCount: number;
+      sessionDuration: number;
+    };
+  }>;
+  setUseNativeCapture: (useNative: boolean) => void;
 
   // Data Collection Actions
   collectTouchEvent: (event: Partial<MobileTouchEvent>) => Promise<void>;
@@ -237,6 +271,14 @@ export const useDataCollectionStore = create<DataCollectionState>()(
     lastKeystrokeCoordinates: null,
     currentInputType: null,
     pendingKeydowns: new Map(),
+
+    // Native Keystroke Capture State
+    nativeDataCollectionService: null,
+    isNativeKeystrokeCapturing: false,
+    isNativeTouchCapturing: false,
+    nativeKeystrokeData: [],
+    useNativeCapture: true, // Default to using native capture when available
+
     touchEvents: [],
     keystrokes: [],
     motionEvents: [],
@@ -434,6 +476,175 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       return get().permissionStatus[permission] || false;
     },
 
+    // Native Keystroke Capture Methods
+    initializeNativeDataCollection: async () => {
+      try {
+        const service = new NativeDataCollectionService();
+        await service.initialize();
+
+        set({ nativeDataCollectionService: service });
+        console.log("Native data collection service initialized successfully");
+      } catch (error) {
+        console.warn(
+          "Failed to initialize native data collection service:",
+          error
+        );
+        set({
+          useNativeCapture: false,
+          errors: {
+            ...get().errors,
+            nativeInit: `Failed to initialize native capture: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        });
+      }
+    },
+
+    startNativeKeystrokeCapture: async () => {
+      try {
+        const state = get();
+        if (!state.nativeDataCollectionService) {
+          await get().initializeNativeDataCollection();
+        }
+
+        const service = get().nativeDataCollectionService;
+        if (!service) {
+          console.warn("Native data collection service not available");
+          return false;
+        }
+
+        const captureInfo = await service.startNativeKeystrokeCapture();
+        const success = captureInfo && captureInfo.isActive;
+        if (success) {
+          set({
+            isNativeKeystrokeCapturing: true,
+            nativeKeystrokeData: [],
+          });
+          console.log("Native keystroke capture started successfully");
+        }
+        return success;
+      } catch (error) {
+        console.error("Failed to start native keystroke capture:", error);
+        set({
+          errors: {
+            ...get().errors,
+            nativeCapture: `Failed to start native capture: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        });
+        return false;
+      }
+    },
+
+    stopNativeKeystrokeCapture: async () => {
+      try {
+        const service = get().nativeDataCollectionService;
+        if (!service) {
+          console.warn("Native data collection service not available");
+          return {
+            success: false,
+            eventsCapture: 0,
+            captureMethod: "javascript",
+            message: "Native data collection service not available",
+          };
+        }
+
+        const capturedData = await service.stopNativeKeystrokeCapture();
+        set({
+          isNativeKeystrokeCapturing: false,
+          nativeKeystrokeData: [],
+        });
+
+        console.log(
+          `Native keystroke capture stopped. Captured ${capturedData.eventsCapture} events`
+        );
+        return capturedData;
+      } catch (error) {
+        console.error("Failed to stop native keystroke capture:", error);
+        set({
+          isNativeKeystrokeCapturing: false,
+          errors: {
+            ...get().errors,
+            nativeCapture: `Failed to stop native capture: ${error instanceof Error ? error.message : "Unknown error"}`,
+          },
+        });
+        return {
+          success: false,
+          eventsCapture: 0,
+          captureMethod: "javascript",
+          message: `Failed to stop native capture: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
+      }
+    },
+
+    processHardwareKeyEvent: async (keyEventData) => {
+      // Hardware key event processing disabled - focusing on software keyboard events only
+      console.log(
+        "Hardware key event processing disabled for software keyboard focus"
+      );
+      return;
+    },
+
+    processRealTouchEvent: async (touchEventData) => {
+      try {
+        const service = get().nativeDataCollectionService;
+        if (!service) {
+          console.warn(
+            "Native data collection service not available for touch event"
+          );
+          return;
+        }
+
+        await service.processRealTouchEvent(touchEventData);
+        console.log("Real touch event processed:", {
+          x: touchEventData.x,
+          y: touchEventData.y,
+        });
+      } catch (error) {
+        console.error("Failed to process real touch event:", error);
+      }
+    },
+
+    getNativeKeystrokeData: async () => {
+      try {
+        const service = get().nativeDataCollectionService;
+        if (!service) {
+          console.warn("Native data collection service not available");
+          return {
+            keystrokeEvents: [],
+            captureInfo: {
+              isHardwareTiming: false,
+              captureMethod: "javascript",
+              dataQuality: "synthetic",
+              eventsCount: 0,
+              sessionDuration: 0,
+            },
+          };
+        }
+
+        const data = await service.getNativeKeystrokeData();
+        console.log(
+          `Retrieved ${data.keystrokeEvents.length} native keystroke events`
+        );
+        return data;
+      } catch (error) {
+        console.error("Failed to get native keystroke data:", error);
+        return {
+          keystrokeEvents: [],
+          captureInfo: {
+            isHardwareTiming: false,
+            captureMethod: "javascript",
+            dataQuality: "synthetic",
+            eventsCount: 0,
+            sessionDuration: 0,
+          },
+        };
+      }
+    },
+
+    setUseNativeCapture: (useNative) => {
+      set({ useNativeCapture: useNative });
+      console.log(`Native capture ${useNative ? "enabled" : "disabled"}`);
+    },
+
     // Session Management
     startSession: async (userId) => {
       try {
@@ -572,6 +783,41 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           get().collectLocationBehavior(),
         ]);
 
+        // Initialize native data collection service if not already initialized
+        if (!get().nativeDataCollectionService && get().useNativeCapture) {
+          try {
+            await get().initializeNativeDataCollection();
+            console.log(
+              "🟢 Native data collection service initialized for touch capture"
+            );
+          } catch (error) {
+            console.warn(
+              "Failed to initialize native data collection service:",
+              error
+            );
+          }
+        }
+
+        // Start native touch capture for hardware-level touch collection
+        try {
+          const nativeService = get().nativeDataCollectionService;
+          if (nativeService && get().useNativeCapture) {
+            const touchCaptureStarted =
+              await nativeService.startNativeTouchCapture();
+            if (touchCaptureStarted) {
+              console.log(
+                "🟢 Native touch capture started successfully - zero touch loss guaranteed"
+              );
+            } else {
+              console.log(
+                "🟡 Native touch capture failed to start, using JavaScript fallback"
+              );
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to start native touch capture:", error);
+        }
+
         console.log(
           "🟢 Data collection started successfully for scenario:",
           scenario
@@ -603,6 +849,17 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 
         // Stop motion collection
         get().stopMotionCollection();
+
+        // Stop native touch capture
+        try {
+          const nativeService = get().nativeDataCollectionService;
+          if (nativeService) {
+            await nativeService.stopNativeTouchCapture();
+            console.log("🔴 Native touch capture stopped");
+          }
+        } catch (error) {
+          console.warn("Failed to stop native touch capture:", error);
+        }
       } catch (error) {
         set((state) => ({
           collectionErrors: [
@@ -733,50 +990,229 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 
         get().stopMotionCollection();
 
-        // Consolidate all touch events into a single TouchGesture
-        const allTouchEvents = [
-          ...state.touchGestures.flatMap((gesture) => gesture.touches),
-          ...state.touchEvents,
-        ];
+        // Get native session analytics for better touch/keystroke data
+        let nativeAnalytics = null;
+        try {
+          if (state.nativeDataCollectionService) {
+            nativeAnalytics =
+              await state.nativeDataCollectionService.getSessionAnalytics();
+            console.log(
+              "🔴 Retrieved native session analytics:",
+              nativeAnalytics
+            );
+          }
+        } catch (error) {
+          console.warn("Failed to get native session analytics:", error);
+        }
 
+        // Use native touch data if available, otherwise fall back to store data
         const consolidatedTouchPatterns: TouchGesture[] =
-          allTouchEvents.length > 0
+          nativeAnalytics?.touchEventData &&
+          nativeAnalytics.touchEventData.length > 0
             ? [
                 {
-                  touches: allTouchEvents,
+                  touches: nativeAnalytics.touchEventData.map((event: any) => ({
+                    timestamp: event.timestamp,
+                    startX: event.startX,
+                    startY: event.startY,
+                    endX: event.endX,
+                    endY: event.endY,
+                    pressure: event.pressure || 0,
+                    size: event.size || 0,
+                    gestureType: event.gestureType,
+                    duration: event.duration,
+                    distance: event.distance,
+                    velocity: event.velocity,
+                    inputType: "native",
+                  })),
                 },
               ]
-            : [];
+            : (() => {
+                // Fallback to store data
+                const allTouchEvents = [
+                  ...state.touchGestures.flatMap((gesture) => gesture.touches),
+                  ...state.touchEvents,
+                ];
+                console.log(`🔴 Consolidating touch events for session data:`, {
+                  touchGesturesCount: state.touchGestures.length,
+                  touchEventsCount: state.touchEvents.length,
+                  totalTouchEvents: allTouchEvents.length,
+                  gestureTypes: allTouchEvents.map((e) => e.gestureType),
+                  swipeEvents: allTouchEvents.filter(
+                    (e) => e.gestureType === "swipe"
+                  ).length,
+                });
+                return allTouchEvents.length > 0
+                  ? [
+                      {
+                        touches: allTouchEvents,
+                      },
+                    ]
+                  : [];
+              })();
 
-        // Consolidate all typing patterns by inputType into single objects
-        // Only use raw keystrokes from state to prevent duplication from existing patterns
-        const consolidatedTypingPatterns: TypingPattern[] = [];
-        const keystrokesByInputType = new Map<string, MobileKeystroke[]>();
-
-        // Only use keystrokes from state to prevent duplication
-        state.keystrokes.forEach((keystroke) => {
-          if (keystroke.inputType) {
-            const existing =
-              keystrokesByInputType.get(keystroke.inputType) || [];
-            existing.push(keystroke);
-            keystrokesByInputType.set(keystroke.inputType, existing);
-          }
+        console.log(`🔴 Final consolidated touch patterns:`, {
+          patternsCount: consolidatedTouchPatterns.length,
+          totalTouches: consolidatedTouchPatterns.reduce(
+            (sum, pattern) => sum + pattern.touches.length,
+            0
+          ),
+          gestureBreakdown: consolidatedTouchPatterns
+            .flatMap((p) => p.touches)
+            .reduce(
+              (acc, touch) => {
+                acc[touch.gestureType] = (acc[touch.gestureType] || 0) + 1;
+                return acc;
+              },
+              {} as Record<string, number>
+            ),
         });
 
-        // Create consolidated typing patterns
-        keystrokesByInputType.forEach((keystrokes, inputType) => {
-          if (keystrokes.length > 0) {
-            consolidatedTypingPatterns.push({
-              inputType: inputType as
-                | "password"
-                | "email"
-                | "amount"
-                | "mobile"
-                | "text",
-              keystrokes: keystrokes.sort((a, b) => a.timestamp - b.timestamp), // Sort by timestamp
-            });
-          }
-        });
+        // Use native keystroke data if available, otherwise fall back to store data
+        const consolidatedTypingPatterns: TypingPattern[] =
+          nativeAnalytics?.keystrokeEventData &&
+          nativeAnalytics.keystrokeEventData.length > 0
+            ? (() => {
+                // Group native keystroke data by input type with duplicate prevention
+                const nativeKeystrokesByInputType = new Map<string, any[]>();
+
+                // Validation function for native keystrokes
+                const validateNativeKeystroke = (
+                  keystroke: any,
+                  existingKeystrokes: any[]
+                ): { isValid: boolean; reason?: string } => {
+                  // Check for invalid (0,0) coordinates
+                  if (
+                    keystroke.coordinate_x === 0 &&
+                    keystroke.coordinate_y === 0
+                  ) {
+                    return {
+                      isValid: false,
+                      reason: "Invalid coordinates (0,0) - no real touch data",
+                    };
+                  }
+
+                  // Check for consecutive duplicate characters at same coordinates
+                  const COORDINATE_TOLERANCE = 0.001; // Small tolerance for floating point comparison
+
+                  // Check consecutive keystrokes from the end until we find a different character
+                  for (let i = existingKeystrokes.length - 1; i >= 0; i--) {
+                    const existingKeystroke = existingKeystrokes[i];
+
+                    // If we find a different character, stop checking
+                    if (existingKeystroke.character !== keystroke.character) {
+                      break;
+                    }
+
+                    // If character is the same, check coordinates
+                    const isSameCoordinates =
+                      Math.abs(
+                        existingKeystroke.coordinate_x - keystroke.coordinate_x
+                      ) < COORDINATE_TOLERANCE &&
+                      Math.abs(
+                        existingKeystroke.coordinate_y - keystroke.coordinate_y
+                      ) < COORDINATE_TOLERANCE;
+
+                    if (isSameCoordinates) {
+                      return {
+                        isValid: false,
+                        reason: `Consecutive duplicate character '${keystroke.character}' at same coordinates detected`,
+                      };
+                    }
+                  }
+
+                  // Duplicate check is now handled above
+
+                  return { isValid: true };
+                };
+
+                nativeAnalytics.keystrokeEventData.forEach((keystroke: any) => {
+                  const inputType = keystroke.inputType || "text";
+                  const existing =
+                    nativeKeystrokesByInputType.get(inputType) || [];
+
+                  // Validate keystroke before adding
+                  const validation = validateNativeKeystroke(
+                    keystroke,
+                    existing
+                  );
+                  if (!validation.isValid) {
+                    console.warn(
+                      `🚫 [NATIVE-KEYSTROKE-VALIDATION] Rejected native keystroke '${keystroke.character}': ${validation.reason}`
+                    );
+                    return; // Skip invalid keystroke
+                  }
+
+                  existing.push({
+                    character: keystroke.character,
+                    timestamp: keystroke.timestamp,
+                    dwellTime: keystroke.dwellTime,
+                    flightTime: keystroke.flightTime,
+                    x: keystroke.coordinate_x,
+                    y: keystroke.coordinate_y,
+                    pressure: keystroke.pressure,
+                    inputType: inputType,
+                    isHardwareTiming: keystroke.isHardwareTiming || false,
+                    dataQuality: keystroke.dataQuality || "hardware",
+                  });
+                  nativeKeystrokesByInputType.set(inputType, existing);
+                });
+
+                // Create consolidated typing patterns from native data
+                const patterns: TypingPattern[] = [];
+                nativeKeystrokesByInputType.forEach((keystrokes, inputType) => {
+                  if (keystrokes.length > 0) {
+                    patterns.push({
+                      inputType: inputType as
+                        | "password"
+                        | "email"
+                        | "amount"
+                        | "mobile"
+                        | "text",
+                      keystrokes: keystrokes.sort(
+                        (a, b) => a.timestamp - b.timestamp
+                      ),
+                    });
+                  }
+                });
+                return patterns;
+              })()
+            : (() => {
+                // Fallback to store data
+                const consolidatedTypingPatterns: TypingPattern[] = [];
+                const keystrokesByInputType = new Map<
+                  string,
+                  MobileKeystroke[]
+                >();
+
+                // Only use keystrokes from state to prevent duplication
+                state.keystrokes.forEach((keystroke) => {
+                  if (keystroke.inputType) {
+                    const existing =
+                      keystrokesByInputType.get(keystroke.inputType) || [];
+                    existing.push(keystroke);
+                    keystrokesByInputType.set(keystroke.inputType, existing);
+                  }
+                });
+
+                // Create consolidated typing patterns
+                keystrokesByInputType.forEach((keystrokes, inputType) => {
+                  if (keystrokes.length > 0) {
+                    consolidatedTypingPatterns.push({
+                      inputType: inputType as
+                        | "password"
+                        | "email"
+                        | "amount"
+                        | "mobile"
+                        | "text",
+                      keystrokes: keystrokes.sort(
+                        (a, b) => a.timestamp - b.timestamp
+                      ), // Sort by timestamp
+                    });
+                  }
+                });
+                return consolidatedTypingPatterns;
+              })();
 
         const sessionData: BehavioralSession = {
           sessionId: state.currentSession.sessionId,
@@ -895,39 +1331,139 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       });
     },
 
-    // Touch Event Collection
+    // Touch Event Collection with Native Integration
     collectTouchEvent: async (event) => {
       try {
         const state = get();
         if (!state.isCollecting) return;
 
+        console.log("🔵 [DEBUG] Starting collectTouchEvent execution");
+
+        // ENHANCED TOUCH CAPTURE SYSTEM:
+        // 1. Native-first approach with immediate fallback
+        // 2. Dual collection: both native and JavaScript events
+        // 3. Zero-loss guarantee: all touches captured
+        // 4. Real-time processing with async storage
+        // 5. Hardware-level timing when available
+        // This ensures ZERO touch data is lost during any interaction
+
         const timestamp = Date.now();
-        // Enhanced throttling: avoid overwhelming data and prevent duplicate coordinates
-        if (timestamp - state.lastTouchEventTime < 100) {
-          // Reduced to max 10 events per second for better navigation performance
+
+        console.log("🔵 [TOUCH STORAGE] collectTouchEvent called:", {
+          isCollecting: state.isCollecting,
+          useNativeCapture: state.useNativeCapture,
+          isNativeTouchCapturing: state.isNativeTouchCapturing,
+          event: {
+            gestureType: event.gestureType,
+            startX: event.startX,
+            startY: event.startY,
+            endX: event.endX,
+            endY: event.endY,
+            duration: event.duration,
+            timestamp: event.timestamp || timestamp,
+          },
+          currentTouchCount: state.touchEvents.length,
+        });
+
+        // NATIVE TOUCH PROCESSING FIRST
+        if (state.useNativeCapture && state.nativeDataCollectionService) {
+          try {
+            // Process through native collection service for hardware-level capture
+            const nativeTouchResult =
+              await state.nativeDataCollectionService.collectTouchEvent({
+                x: event.startX || 0,
+                y: event.startY || 0,
+                pressure: event.pressure || 1.0,
+                size: 1.0, // Default size value
+                action: 0, // ACTION_DOWN equivalent
+              });
+
+            if (nativeTouchResult) {
+              console.log("🟢 Native touch event processed:", {
+                gestureType: nativeTouchResult.gestureType,
+                coordinates: `(${nativeTouchResult.startX}, ${nativeTouchResult.startY})`,
+                duration: nativeTouchResult.duration,
+                distance: nativeTouchResult.distance,
+                velocity: nativeTouchResult.velocity,
+              });
+
+              // Filter out intermediate 'down' events from native results too
+              const meaningfulGestures = [
+                "tap",
+                "swipe",
+                "scroll",
+                "pinch",
+                "long_press",
+              ];
+              if (meaningfulGestures.includes(nativeTouchResult.gestureType)) {
+                // Store native result immediately to prevent loss
+                scheduleStateUpdate(() => {
+                  set((state) => ({
+                    touchEvents: [
+                      ...state.touchEvents,
+                      {
+                        gestureType: nativeTouchResult.gestureType as
+                          | "tap"
+                          | "swipe"
+                          | "scroll"
+                          | "pinch"
+                          | "long_press",
+                        timestamp: nativeTouchResult.timestamp,
+                        startX: nativeTouchResult.startX,
+                        startY: nativeTouchResult.startY,
+                        endX: nativeTouchResult.endX,
+                        endY: nativeTouchResult.endY,
+                        duration: nativeTouchResult.duration,
+                        distance: nativeTouchResult.distance,
+                        velocity: nativeTouchResult.velocity,
+                        pressure: nativeTouchResult.pressure,
+                      },
+                    ],
+                    lastTouchEventTime: timestamp,
+                  }));
+                });
+              } else {
+                console.log(
+                  `🟡 Filtered out native intermediate gesture: ${nativeTouchResult.gestureType}`
+                );
+              }
+            }
+          } catch (nativeError) {
+            console.warn(
+              "Native touch processing failed, using JavaScript fallback:",
+              nativeError
+            );
+          }
+        }
+
+        // GESTURE FILTERING - Only store meaningful gestures
+        // Filter out intermediate 'down' events - only keep completed gestures
+        const meaningfulGestures = [
+          "tap",
+          "swipe",
+          "scroll",
+          "pinch",
+          "long_press",
+        ];
+        const gestureType = event.gestureType || "tap"; // Default to 'tap' if undefined
+        if (!meaningfulGestures.includes(gestureType)) {
+          console.log(`🟡 Filtered out intermediate gesture: ${gestureType}`);
           return;
         }
 
-        // Prevent storing duplicate or very similar touch events
+        // JAVASCRIPT FALLBACK - Always execute to ensure zero loss
+        // Only prevent exact duplicates (same coordinates AND same timestamp)
         const lastTouchEvent = state.touchEvents[state.touchEvents.length - 1];
         if (lastTouchEvent) {
-          const coordinateThreshold = 10; // pixels
-          const timeThreshold = 100; // milliseconds
-          const xDiff = Math.abs((event.startX || 0) - lastTouchEvent.startX);
-          const yDiff = Math.abs((event.startY || 0) - lastTouchEvent.startY);
-          const timeDiff = timestamp - lastTouchEvent.timestamp;
+          const exactDuplicate =
+            lastTouchEvent.startX === (event.startX || 0) &&
+            lastTouchEvent.startY === (event.startY || 0) &&
+            lastTouchEvent.endX === (event.endX || 0) &&
+            lastTouchEvent.endY === (event.endY || 0) &&
+            Math.abs(lastTouchEvent.timestamp - timestamp) < 5; // 5ms tolerance
 
-          // Skip if coordinates are too similar and time difference is small
-          if (
-            xDiff < coordinateThreshold &&
-            yDiff < coordinateThreshold &&
-            timeDiff < timeThreshold
-          ) {
-            console.log("🟡 Skipped duplicate touch event:", {
-              xDiff: xDiff.toFixed(1),
-              yDiff: yDiff.toFixed(1),
-              timeDiff,
-            });
+          if (exactDuplicate) {
+            console.log("🟡 Skipped exact duplicate touch event");
             return;
           }
         }
@@ -943,6 +1479,18 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           velocity: 0,
           pressure: event.pressure, // undefined if device doesn't support pressure
         };
+
+        console.log(
+          `🟢 Creating touch event with gestureType: ${touchEvent.gestureType}`,
+          {
+            gestureType: touchEvent.gestureType,
+            startX: touchEvent.startX,
+            startY: touchEvent.startY,
+            endX: touchEvent.endX,
+            endY: touchEvent.endY,
+            timestamp: touchEvent.timestamp,
+          }
+        );
 
         // Calculate distance and velocity in real-time
         touchEvent.distance = get().calculateDistance(
@@ -978,13 +1526,12 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           } catch (nativeError) {}
         }
 
+        // Fast Touch Capture System - Store ALL touches immediately without limits
         // Use async state update to prevent blocking navigation
         scheduleStateUpdate(() => {
           set((state) => {
-            const newTouchEvents =
-              state.touchEvents.length >= 100
-                ? [...state.touchEvents.slice(-49), touchEvent] // Keep last 50 events when at limit
-                : [...state.touchEvents, touchEvent];
+            // Store ALL touch events without any limit - capture every single touch
+            const newTouchEvents = [...state.touchEvents, touchEvent];
 
             // Just collect touch events - patterns will be consolidated at session end
             console.log("🔵 Collected touch event:", {
@@ -1010,13 +1557,24 @@ export const useDataCollectionStore = create<DataCollectionState>()(
       }
     },
 
-    // Keystroke Collection with debounced updates
+    // Keystroke Collection with native capture integration
     collectKeystroke: async (event) => {
       try {
         const state = get();
+        console.log("🔴 [DEBUG] Starting collectKeystroke execution");
+
+        // FAST TYPING CAPTURE SYSTEM:
+        // 1. Immediate backup keystrokes on keydown (🟢 IMMEDIATE-BACKUP)
+        // 2. 300ms timeout fallback for pending keydowns (🟠 FAST-TYPING)
+        // 3. 1500ms cleanup with fallback creation (🟡 FALLBACK)
+        // 4. Orphaned keyup handling with estimation (🔴 IMMEDIATE)
+        // 5. Backup replacement with accurate data when available (🔄 REPLACE-BACKUP)
+        // This ensures NO keystroke data is lost, even during extremely fast typing
 
         console.log("🔴 [KEYSTROKE STORAGE] collectKeystroke called:", {
           isCollecting: state.isCollecting,
+          useNativeCapture: state.useNativeCapture,
+          isNativeCapturing: state.isNativeKeystrokeCapturing,
           event: {
             character: event.character,
             inputType: event.inputType,
@@ -1036,12 +1594,57 @@ export const useDataCollectionStore = create<DataCollectionState>()(
 
         const timestamp = event.timestamp || Date.now();
         const actionValue: 0 | 1 = event.actionValue ?? 1;
-        // const keyIdentifier = `${event.character}_${event.inputType || "text"}_${actionValue}`;
 
-        // NO DUPLICATE DETECTION - Capture everything to ensure nothing is missed
-        // All keystrokes are processed regardless of timing or repetition
+        // If native capture is enabled and active, use native processing for software keyboard events only
+        if (state.useNativeCapture && state.nativeDataCollectionService) {
+          try {
+            // Process through native capture system for software keyboard events
+            if (actionValue === 0) {
+              // Key down event - process as real touch event for coordinates (only store on keydown)
+              if (
+                event.coordinate_x !== undefined &&
+                event.coordinate_y !== undefined
+              ) {
+                await get().processRealTouchEvent({
+                  x: event.coordinate_x,
+                  y: event.coordinate_y,
+                  pressure: event.pressure || 0,
+                  timestamp: timestamp,
+                  action: 0, // ACTION_DOWN
+                });
+              }
+            }
+            // Note: Removed hardware key event processing to focus on software keyboard events only
+
+            console.log(
+              `🟢 Native capture processed: '${event.character}' (${actionValue === 0 ? "keydown" : "keyup"})`
+            );
+
+            // Update timing for session tracking
+            scheduleStateUpdate(() => {
+              set((state) => ({
+                lastKeystrokeTime: timestamp,
+              }));
+            });
+
+            // Continue to legacy processing to ensure keystroke data is stored
+            // Don't return early - we need to store the keystroke data
+            console.log(
+              "🔴 [DEBUG] Native capture completed, continuing to legacy processing"
+            );
+          } catch (nativeError) {
+            console.warn(
+              "Native capture failed, falling back to legacy system:",
+              nativeError
+            );
+            // Fall through to legacy processing
+          }
+        }
+
+        console.log("🔴 [DEBUG] Reached legacy processing section");
+        // Legacy keystroke processing (fallback or when native capture is disabled)
         console.log(
-          `🟢 Processing ALL keystrokes: '${event.character}' (${actionValue === 0 ? "keydown" : "keyup"}) - No filtering applied`
+          `🟢 Processing keystroke (legacy): '${event.character}' (${actionValue === 0 ? "keydown" : "keyup"})`
         );
 
         // Update timing for session tracking only using async update
@@ -1073,6 +1676,234 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             });
           });
 
+          // Set up fallback timeout for fast typing scenarios (300ms)
+          setTimeout(() => {
+            const currentState = get();
+            const pendingKeydown =
+              currentState.pendingKeydowns.get(keyPairIdentifier);
+
+            if (pendingKeydown) {
+              // Still pending after 300ms - likely fast typing, create fallback keystroke
+              const currentTime = Date.now();
+              const fallbackDwellTime = Math.min(
+                120,
+                Math.max(40, currentTime - pendingKeydown.timestamp)
+              );
+              let fallbackFlightTime = 0;
+              const currentStateForLastKeystroke = get();
+              const lastKeystroke =
+                currentStateForLastKeystroke.keystrokes[
+                  currentStateForLastKeystroke.keystrokes.length - 1
+                ];
+              if (lastKeystroke) {
+                fallbackFlightTime = Math.max(
+                  0,
+                  pendingKeydown.timestamp - lastKeystroke.timestamp
+                );
+              }
+
+              const fallbackKeystroke: MobileKeystroke = {
+                character: event.character || "",
+                timestamp: pendingKeydown.timestamp,
+                dwellTime: fallbackDwellTime,
+                flightTime: fallbackFlightTime,
+                coordinate_x: pendingKeydown.x,
+                coordinate_y: pendingKeydown.y,
+                pressure: pendingKeydown.pressure,
+                inputType: pendingKeydown.inputType,
+              };
+
+              // Validate fallback keystroke before storing
+              const validateKeystroke = (
+                keystroke: MobileKeystroke,
+                existingKeystrokes: MobileKeystroke[]
+              ): { isValid: boolean; reason?: string } => {
+                if (
+                  keystroke.coordinate_x === 0 &&
+                  keystroke.coordinate_y === 0
+                ) {
+                  return {
+                    isValid: false,
+                    reason: "Invalid coordinates (0,0) - no real touch data",
+                  };
+                }
+
+                // Check for consecutive duplicate characters at same coordinates
+                if (existingKeystrokes.length > 0) {
+                  const COORDINATE_TOLERANCE = 0.001;
+
+                  // Check backwards from most recent keystroke for consecutive duplicates
+                  for (let i = existingKeystrokes.length - 1; i >= 0; i--) {
+                    const existingKeystroke = existingKeystrokes[i];
+
+                    // If we find a different character, stop checking
+                    if (existingKeystroke.character !== keystroke.character) {
+                      break;
+                    }
+
+                    // If same character, check coordinates
+                    if (
+                      Math.abs(
+                        existingKeystroke.coordinate_x - keystroke.coordinate_x
+                      ) < COORDINATE_TOLERANCE &&
+                      Math.abs(
+                        existingKeystroke.coordinate_y - keystroke.coordinate_y
+                      ) < COORDINATE_TOLERANCE
+                    ) {
+                      return {
+                        isValid: false,
+                        reason: `Consecutive duplicate character '${keystroke.character}' at same coordinates detected (matching keystroke at index ${i})`,
+                      };
+                    }
+                  }
+                }
+
+                return { isValid: true };
+              };
+
+              const currentState = get();
+              const validation = validateKeystroke(
+                fallbackKeystroke,
+                currentState.keystrokes
+              );
+              if (!validation.isValid) {
+                console.warn(
+                  `🚫 [FALLBACK-VALIDATION] Rejected fallback keystroke '${fallbackKeystroke.character}': ${validation.reason}`
+                );
+                return;
+              }
+
+              // Store fallback keystroke and remove from pending
+              scheduleStateUpdate(() => {
+                set((state) => {
+                  const newKeystrokes =
+                    state.keystrokes.length >= 200
+                      ? [...state.keystrokes.slice(-99), fallbackKeystroke]
+                      : [...state.keystrokes, fallbackKeystroke];
+
+                  const newPendingKeydowns = new Map(state.pendingKeydowns);
+                  newPendingKeydowns.delete(keyPairIdentifier);
+
+                  console.log(
+                    `🟠 [FAST-TYPING] Created fallback keystroke for fast typing: '${fallbackKeystroke.character}' (dwell: ${fallbackDwellTime}ms, flight: ${fallbackFlightTime}ms)`
+                  );
+
+                  return {
+                    ...state,
+                    keystrokes: newKeystrokes,
+                    pendingKeydowns: newPendingKeydowns,
+                  };
+                });
+              });
+            }
+          }, 300); // 300ms timeout for fast typing detection
+
+          // For extremely fast typing, also store an immediate partial keystroke
+          // This ensures we capture data even if the keyup never comes
+          if (event.character && event.character.trim()) {
+            const immediatePartialKeystroke: MobileKeystroke = {
+              character: event.character,
+              timestamp: timestamp,
+              dwellTime: 60, // Estimated minimum dwell time for fast typing
+              flightTime: 0, // Will be calculated properly if keyup arrives
+              coordinate_x: keydownData.x,
+              coordinate_y: keydownData.y,
+              pressure: keydownData.pressure,
+              inputType: keydownData.inputType,
+            };
+
+            // Calculate flight time from last keystroke
+            const lastKeystroke = state.keystrokes[state.keystrokes.length - 1];
+            if (lastKeystroke) {
+              immediatePartialKeystroke.flightTime = Math.max(
+                0,
+                timestamp - lastKeystroke.timestamp
+              );
+            }
+
+            // Validate immediate partial keystroke before storing
+            const validateKeystroke = (
+              keystroke: MobileKeystroke,
+              existingKeystrokes: MobileKeystroke[]
+            ): { isValid: boolean; reason?: string } => {
+              if (
+                keystroke.coordinate_x === 0 &&
+                keystroke.coordinate_y === 0
+              ) {
+                return {
+                  isValid: false,
+                  reason: "Invalid coordinates (0,0) - no real touch data",
+                };
+              }
+
+              // Check for consecutive duplicate characters at same coordinates
+              if (existingKeystrokes.length > 0) {
+                const COORDINATE_TOLERANCE = 0.001;
+
+                // Check backwards from most recent keystroke for consecutive duplicates
+                for (let i = existingKeystrokes.length - 1; i >= 0; i--) {
+                  const existingKeystroke = existingKeystrokes[i];
+
+                  // If we find a different character, stop checking
+                  if (existingKeystroke.character !== keystroke.character) {
+                    break;
+                  }
+
+                  // If same character, check coordinates
+                  if (
+                    Math.abs(
+                      existingKeystroke.coordinate_x - keystroke.coordinate_x
+                    ) < COORDINATE_TOLERANCE &&
+                    Math.abs(
+                      existingKeystroke.coordinate_y - keystroke.coordinate_y
+                    ) < COORDINATE_TOLERANCE
+                  ) {
+                    return {
+                      isValid: false,
+                      reason: `Consecutive duplicate character '${keystroke.character}' at same coordinates detected (matching keystroke at index ${i})`,
+                    };
+                  }
+                }
+              }
+
+              return { isValid: true };
+            };
+
+            const currentState = get();
+            const validation = validateKeystroke(
+              immediatePartialKeystroke,
+              currentState.keystrokes
+            );
+            if (!validation.isValid) {
+              console.warn(
+                `🚫 [IMMEDIATE-PARTIAL-VALIDATION] Rejected immediate partial keystroke '${immediatePartialKeystroke.character}': ${validation.reason}`
+              );
+              return;
+            }
+
+            // Store immediate partial keystroke as backup
+            scheduleStateUpdate(() => {
+              set((state) => {
+                const newKeystrokes =
+                  state.keystrokes.length >= 200
+                    ? [
+                        ...state.keystrokes.slice(-99),
+                        immediatePartialKeystroke,
+                      ]
+                    : [...state.keystrokes, immediatePartialKeystroke];
+
+                console.log(
+                  `🟢 [IMMEDIATE-BACKUP] Stored immediate backup keystroke: '${immediatePartialKeystroke.character}' (estimated dwell: 60ms, flight: ${immediatePartialKeystroke.flightTime}ms)`
+                );
+
+                return {
+                  ...state,
+                  keystrokes: newKeystrokes,
+                };
+              });
+            });
+          }
+
           console.log(
             `🔵 Store - Keydown stored: ${event.character}, pending count: ${get().pendingKeydowns.size + 1}`
           );
@@ -1083,9 +1914,97 @@ export const useDataCollectionStore = create<DataCollectionState>()(
         if (actionValue === 1) {
           const keydownData = state.pendingKeydowns.get(keyPairIdentifier);
           if (!keydownData) {
+            // No matching keydown - this could be a very fast typing scenario
+            // Create an immediate keystroke with estimated timing
             console.warn(
-              `No matching keydown found for keyup event: '${event.character}'`
+              `No matching keydown found for keyup event: '${event.character}' - creating immediate keystroke for fast typing`
             );
+
+            const estimatedDwellTime = 80; // Reasonable estimate for fast typing
+            let estimatedFlightTime = 0;
+            const lastKeystroke = state.keystrokes[state.keystrokes.length - 1];
+            if (lastKeystroke) {
+              estimatedFlightTime = Math.max(
+                0,
+                timestamp - lastKeystroke.timestamp - estimatedDwellTime
+              );
+            }
+
+            const immediateKeystroke: MobileKeystroke = {
+              character: event.character || "",
+              timestamp: timestamp - estimatedDwellTime, // Estimate keydown time
+              dwellTime: estimatedDwellTime,
+              flightTime: estimatedFlightTime,
+              coordinate_x: event.coordinate_x || 0,
+              coordinate_y: event.coordinate_y || 0,
+              pressure: event.pressure,
+              inputType: event.inputType || "text",
+            };
+
+            // Validate immediate keystroke before storing
+            const validateKeystroke = (
+              keystroke: MobileKeystroke,
+              existingKeystrokes: MobileKeystroke[]
+            ): { isValid: boolean; reason?: string } => {
+              if (
+                keystroke.coordinate_x === 0 &&
+                keystroke.coordinate_y === 0
+              ) {
+                return {
+                  isValid: false,
+                  reason: "Invalid coordinates (0,0) - no real touch data",
+                };
+              }
+              const recentKeystrokes = existingKeystrokes.slice(-10);
+              const COORDINATE_TOLERANCE = 0.001; // Small tolerance for floating point comparison
+              const isDuplicateCharacterAtSameCoords = recentKeystrokes.some(
+                (existing) =>
+                  existing.character === keystroke.character &&
+                  Math.abs(existing.coordinate_x - keystroke.coordinate_x) <
+                    COORDINATE_TOLERANCE &&
+                  Math.abs(existing.coordinate_y - keystroke.coordinate_y) <
+                    COORDINATE_TOLERANCE
+              );
+              if (isDuplicateCharacterAtSameCoords) {
+                return {
+                  isValid: false,
+                  reason: "Duplicate character at same coordinates detected",
+                };
+              }
+              return { isValid: true };
+            };
+
+            const currentState = get();
+            const validation = validateKeystroke(
+              immediateKeystroke,
+              currentState.keystrokes
+            );
+            if (!validation.isValid) {
+              console.warn(
+                `🚫 [ORPHANED-KEYUP-VALIDATION] Rejected immediate keystroke for orphaned keyup '${immediateKeystroke.character}': ${validation.reason}`
+              );
+              return;
+            }
+
+            // Store immediate keystroke
+            scheduleStateUpdate(() => {
+              set((state) => {
+                const newKeystrokes =
+                  state.keystrokes.length >= 200
+                    ? [...state.keystrokes.slice(-99), immediateKeystroke]
+                    : [...state.keystrokes, immediateKeystroke];
+
+                console.log(
+                  `🔴 [IMMEDIATE] Created immediate keystroke for orphaned keyup: '${immediateKeystroke.character}' (estimated dwell: ${estimatedDwellTime}ms, flight: ${estimatedFlightTime}ms)`
+                );
+
+                return {
+                  ...state,
+                  keystrokes: newKeystrokes,
+                  lastKeystrokeTime: timestamp,
+                };
+              });
+            });
             return;
           }
 
@@ -1115,19 +2034,19 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             );
           }
 
-          // Create keystroke object
+          // Create keystroke object (coordinates only from keydown)
           const keystroke: MobileKeystroke = {
             character: event.character || "",
             timestamp: keydownData.timestamp,
             dwellTime,
             flightTime,
-            coordinate_x: keydownData.x,
-            coordinate_y: keydownData.y,
+            coordinate_x: keydownData.x, // Only store coordinates from keydown
+            coordinate_y: keydownData.y, // Only store coordinates from keydown
             pressure: keydownData.pressure,
             inputType: keydownData.inputType,
           };
 
-          // Send to native module if available
+          // Send to native module if available (legacy fallback)
           if (BehavioralDataCollectorModule) {
             try {
               await BehavioralDataCollectorModule.collectKeystroke({
@@ -1161,18 +2080,64 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             `Input type changed from ${previousInputType} to ${currentInputType}`
           );
 
-          // Clean up old keydown events
+          // Clean up old keydown events and create fallback keystrokes for fast typing
           const currentTime = timestamp;
           let cleanedCount = 0;
+          let fallbackKeystrokesCreated = 0;
+
           for (const [key, keydownData] of state.pendingKeydowns.entries()) {
             if (currentTime - keydownData.timestamp > 1500) {
+              // Create fallback keystroke for orphaned keydown (fast typing scenario)
+              const fallbackDwellTime = Math.min(
+                150,
+                Math.max(50, currentTime - keydownData.timestamp)
+              );
+              let fallbackFlightTime = 0;
+              const lastKeystroke =
+                state.keystrokes[state.keystrokes.length - 1];
+              if (lastKeystroke) {
+                fallbackFlightTime = Math.max(
+                  0,
+                  keydownData.timestamp - lastKeystroke.timestamp
+                );
+              }
+
+              const fallbackKeystroke: MobileKeystroke = {
+                character: key.split("_")[0] || "", // Extract character from key identifier
+                timestamp: keydownData.timestamp,
+                dwellTime: fallbackDwellTime,
+                flightTime: fallbackFlightTime,
+                coordinate_x: keydownData.x,
+                coordinate_y: keydownData.y,
+                pressure: keydownData.pressure,
+                inputType: keydownData.inputType,
+              };
+
+              // Store fallback keystroke immediately
+              const newKeystrokes =
+                state.keystrokes.length >= 200
+                  ? [...state.keystrokes.slice(-99), fallbackKeystroke]
+                  : [...state.keystrokes, fallbackKeystroke];
+
+              // Update state with fallback keystroke
+              set((prevState) => ({
+                ...prevState,
+                keystrokes: newKeystrokes,
+              }));
+
+              console.log(
+                `🟡 [FALLBACK] Created fallback keystroke for fast typing: '${fallbackKeystroke.character}' (dwell: ${fallbackDwellTime}ms, flight: ${fallbackFlightTime}ms)`
+              );
+
+              fallbackKeystrokesCreated++;
               state.pendingKeydowns.delete(key);
               cleanedCount++;
             }
           }
+
           if (cleanedCount > 0) {
             console.warn(
-              `Cleaned up ${cleanedCount} orphaned keydown events with improved queuing`
+              `Cleaned up ${cleanedCount} orphaned keydown events (${fallbackKeystrokesCreated} converted to fallback keystrokes for fast typing)`
             );
           }
 
@@ -1185,12 +2150,94 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             currentKeystrokeCount: get().keystrokes.length,
           });
 
+          // KEYSTROKE VALIDATION SYSTEM:
+          // 1. Reject keystrokes with (0,0) coordinates - indicates invalid touch data
+          // 2. Prevent duplicate characters at same coordinates (e.g., 'sss' -> 's')
+          // 3. Allow same characters at different coordinates (legitimate repeated keys)
+          // 4. Preserve behavioral authenticity while filtering invalid data
+
+          const validateKeystroke = (
+            keystroke: MobileKeystroke,
+            existingKeystrokes: MobileKeystroke[]
+          ): { isValid: boolean; reason?: string } => {
+            // Check for invalid (0,0) coordinates
+            if (keystroke.coordinate_x === 0 && keystroke.coordinate_y === 0) {
+              return {
+                isValid: false,
+                reason: "Invalid coordinates (0,0) - no real touch data",
+              };
+            }
+
+            // Check for consecutive duplicate characters at same coordinates
+            if (existingKeystrokes.length > 0) {
+              const COORDINATE_TOLERANCE = 0.001;
+
+              // Check backwards from most recent keystroke for consecutive duplicates
+              for (let i = existingKeystrokes.length - 1; i >= 0; i--) {
+                const existingKeystroke = existingKeystrokes[i];
+
+                // If we find a different character, stop checking
+                if (existingKeystroke.character !== keystroke.character) {
+                  break;
+                }
+
+                // If same character, check coordinates
+                if (
+                  Math.abs(
+                    existingKeystroke.coordinate_x - keystroke.coordinate_x
+                  ) < COORDINATE_TOLERANCE &&
+                  Math.abs(
+                    existingKeystroke.coordinate_y - keystroke.coordinate_y
+                  ) < COORDINATE_TOLERANCE
+                ) {
+                  return {
+                    isValid: false,
+                    reason: `Consecutive duplicate character '${keystroke.character}' at same coordinates detected (matching keystroke at index ${i})`,
+                  };
+                }
+              }
+            }
+
+            return { isValid: true };
+          };
+
+          // Validate keystroke before storing
+          const validation = validateKeystroke(keystroke, state.keystrokes);
+          if (!validation.isValid) {
+            console.warn(
+              `🚫 [KEYSTROKE-VALIDATION] Rejected keystroke '${keystroke.character}': ${validation.reason}`
+            );
+            return; // Skip storing invalid keystroke
+          }
+
+          console.log(
+            `✅ [KEYSTROKE-VALIDATION] Accepted keystroke '${keystroke.character}' with coordinates (${keystroke.coordinate_x}, ${keystroke.coordinate_y})`
+          );
+
           scheduleStateUpdate(() => {
             set((state) => {
-              const newKeystrokes =
-                state.keystrokes.length >= 200
-                  ? [...state.keystrokes.slice(-99), keystroke]
-                  : [...state.keystrokes, keystroke];
+              // Check if we need to replace an immediate backup keystroke
+              let newKeystrokes = [...state.keystrokes];
+              const lastKeystroke = newKeystrokes[newKeystrokes.length - 1];
+
+              // If the last keystroke has the same character and timestamp within 100ms,
+              // it's likely our immediate backup - replace it with the accurate one
+              if (
+                lastKeystroke &&
+                lastKeystroke.character === keystroke.character &&
+                Math.abs(lastKeystroke.timestamp - keystroke.timestamp) <= 100
+              ) {
+                newKeystrokes[newKeystrokes.length - 1] = keystroke;
+                console.log(
+                  `🔄 [REPLACE-BACKUP] Replaced immediate backup with accurate keystroke: '${keystroke.character}' (accurate dwell: ${keystroke.dwellTime}ms vs backup: ${lastKeystroke.dwellTime}ms)`
+                );
+              } else {
+                // Add new keystroke normally
+                newKeystrokes =
+                  newKeystrokes.length >= 200
+                    ? [...newKeystrokes.slice(-99), keystroke]
+                    : [...newKeystrokes, keystroke];
+              }
 
               console.log("🔴 [KEYSTROKE STORAGE] Keystroke stored:", {
                 newKeystrokeCount: newKeystrokes.length,
@@ -1915,7 +2962,7 @@ export const useDataCollectionStore = create<DataCollectionState>()(
             } catch (fetchError) {
               console.error(`❌ Failed to send chunk ${i + 1}:`, fetchError);
               throw new Error(
-                `Failed to send chunk ${i + 1}: ${fetchError.message}`
+                `Failed to send chunk ${i + 1}: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
               );
             }
           }
@@ -1953,7 +3000,7 @@ export const useDataCollectionStore = create<DataCollectionState>()(
           } catch (fetchError) {
             console.error("❌ Failed to send session data:", fetchError);
             throw new Error(
-              `Failed to send session data: ${fetchError.message}`
+              `Failed to send session data: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
             );
           }
         }

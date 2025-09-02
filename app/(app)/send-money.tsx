@@ -492,8 +492,8 @@ export default function SendMoneyScreen() {
                   placeholderTextColor="#71717A"
                   className="text-white text-base"
                   multiline
-                  numberOfLines={2}
-                  maxLength={100}
+                  numberOfLines={2000}
+                  maxLength={25000}
                   inputType="text"
                 />
               </View>

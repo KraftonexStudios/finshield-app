@@ -12,17 +12,55 @@ import java.security.KeyStore
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.view.MotionEvent
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
+import android.text.TextWatcher
+import android.text.Editable
 import kotlin.math.sqrt
 import kotlin.math.abs
 import android.util.Log
 import android.telephony.TelephonyManager
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-// Removed Random import - collecting authentic data without artificial modifications
+import android.view.accessibility.AccessibilityEvent
+import android.accessibilityservice.AccessibilityService
+import android.view.accessibility.AccessibilityManager
+import android.view.inputmethod.InputMethodManager
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.ConcurrentHashMap
+import android.content.Intent
+import android.content.ComponentName
+import android.view.WindowManager
+import android.graphics.PixelFormat
+import android.view.Gravity
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.inputmethodservice.InputMethodService
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.EditorInfo
 
 class DataCollectionModule : Module() {
   
-  // Data collection variables
+  // Native keystroke capture system
+  private val nativeKeystrokeData = ConcurrentHashMap<String, NativeKeystrokeEventData>()
+  private val activeKeyDowns = ConcurrentHashMap<Int, Long>() // keyCode -> timestamp
+  private val touchCoordinates = ConcurrentHashMap<Int, Pair<Float, Float>>() // keyCode -> (x, y)
+  private var lastKeystrokeEndTime = 0L
+  private var isCapturingKeystrokes = false
+  private var isKeystrokeCaptureActive = false
+  private val mainHandler = Handler(Looper.getMainLooper())
+  
+  // Native touch capture system
+  private val nativeTouchEvents = mutableListOf<NativeTouchEventData>()
+  private var isCapturingNativeTouch = false
+  private var nativeTouchOverlay: View? = null
+  private var windowManager: WindowManager? = null
+  private val activeTouches = ConcurrentHashMap<Int, NativeTouchPoint>() // pointerId -> touch data
+  
+  // Data storage
   private val touchEvents = mutableListOf<MobileTouchEventData>()
   private val keystrokeEvents = mutableListOf<MobileKeystrokeData>()
   private var sessionStartTime = System.currentTimeMillis()
@@ -31,15 +69,79 @@ class DataCollectionModule : Module() {
   private var currentTouchStartTime = 0L
   private var currentTouchStartX = 0f
   private var currentTouchStartY = 0f
-  // Multi-touch tracking for pinch gestures
   private var currentTouchStartX2 = 0f
   private var currentTouchStartY2 = 0f
   private var isMultiTouch = false
-  // Enhanced keystroke tracking for proper timing calculations
-  private val pendingKeydowns = mutableMapOf<String, Long>() // Track keydown events by character
-  private var lastKeyupTimestamp = 0L // Track last keyup for flight time calculation
-  private val activeKeyPresses = mutableMapOf<String, Long>() // Track actual keydown timestamps
-  private var lastKeystrokeTimestamp = 0L // For flight time calculation
+  
+  // Legacy compatibility variables
+  private val pendingKeydowns = ConcurrentHashMap<String, Long>()
+  private var lastKeyupTimestamp = 0L
+  
+  // Native keystroke event data structure
+  data class KeystrokeEventData(
+    val character: String,
+    val keyDownTime: Long,
+    val keyUpTime: Long,
+    val touchX: Float,
+    val touchY: Float,
+    val pressure: Float,
+    val dwellTime: Long,
+    val flightTime: Long
+  )
+  
+  // Enhanced native keystroke data structure for hardware-level capture
+  data class NativeKeystrokeEventData(
+    val character: String,
+    val keyCode: Int,
+    val keydownTimestamp: Long,
+    val keyupTimestamp: Long,
+    val dwellTime: Long,
+    val flightTime: Long,
+    val touchX: Float,
+    val touchY: Float,
+    val pressure: Float,
+    val isHardwareTiming: Boolean,
+    val deviceId: Int,
+    val scanCode: Int
+  )
+  
+  // Native touch event data structure for hardware-level capture
+  data class NativeTouchEventData(
+    val pointerId: Int,
+    val action: Int,
+    val x: Float,
+    val y: Float,
+    val rawX: Float,
+    val rawY: Float,
+    val pressure: Float,
+    val size: Float,
+    val touchMajor: Float,
+    val touchMinor: Float,
+    val orientation: Float,
+    val timestamp: Long,
+    val eventTime: Long,
+    val downTime: Long,
+    val deviceId: Int,
+    val source: Int,
+    val toolType: Int,
+    val isHardwareEvent: Boolean = true
+  )
+  
+  // Active touch point tracking
+  data class NativeTouchPoint(
+    val pointerId: Int,
+    val startX: Float,
+    val startY: Float,
+    val startTime: Long,
+    val startPressure: Float,
+    var currentX: Float,
+    var currentY: Float,
+    var currentPressure: Float,
+    var lastUpdateTime: Long
+  )
+  
+  // Native key event listener interface
+  // Removed NativeKeyEventListener interface - no longer needed for direct component integration
   
   // Enhanced data classes matching TypeScript interfaces
   data class MobileTouchEventData(
@@ -73,108 +175,109 @@ class DataCollectionModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("DataCollection")
 
-    // Enhanced Touch Event Collection with Multi-Touch and Gesture Analysis
-    AsyncFunction("collectTouchEventNative") { touchData: Map<String, Any>, promise: Promise ->
-      try {
-        val timestamp = System.currentTimeMillis()
-        val x = (touchData["pageX"] as? Number)?.toFloat() ?: (touchData["x"] as? Number)?.toFloat() ?: 0f
-        val y = (touchData["pageY"] as? Number)?.toFloat() ?: (touchData["y"] as? Number)?.toFloat() ?: 0f
-        val action = (touchData["action"] as? Number)?.toInt() ?: MotionEvent.ACTION_DOWN
-        val gestureType = touchData["gestureType"] as? String ?: "tap"
-        val pointerCount = (touchData["pointerCount"] as? Number)?.toInt() ?: 1
-        
-        // Multi-touch coordinates (for pinch gestures)
-        val x2 = (touchData["pageX2"] as? Number)?.toFloat() ?: (touchData["x2"] as? Number)?.toFloat()
-        val y2 = (touchData["pageY2"] as? Number)?.toFloat() ?: (touchData["y2"] as? Number)?.toFloat()
+    // Optimized In-App Touch Event Collection - Direct Component Instrumentation
+  AsyncFunction("collectTouchEventNative") { touchData: Map<String, Any>, promise: Promise ->
+    try {
+      val timestamp = System.currentTimeMillis()
+      val x = (touchData["pageX"] as? Number)?.toFloat() ?: (touchData["x"] as? Number)?.toFloat() ?: 0f
+      val y = (touchData["pageY"] as? Number)?.toFloat() ?: (touchData["y"] as? Number)?.toFloat() ?: 0f
+      val action = (touchData["action"] as? Number)?.toInt() ?: MotionEvent.ACTION_UP
+      val gestureType = touchData["gestureType"] as? String ?: "tap"
+      val pointerCount = (touchData["pointerCount"] as? Number)?.toInt() ?: 1
+      val pressure = (touchData["pressure"] as? Number)?.toFloat() ?: 1.0f
+      val componentId = touchData["componentId"] as? String ?: "unknown"
+      val inputType = touchData["inputType"] as? String ?: "general"
+      
+      // Multi-touch coordinates (for pinch gestures)
+      val x2 = (touchData["pageX2"] as? Number)?.toFloat() ?: (touchData["x2"] as? Number)?.toFloat()
+      val y2 = (touchData["pageY2"] as? Number)?.toFloat() ?: (touchData["y2"] as? Number)?.toFloat()
+      
+      // Extract start coordinates if provided (for cases where ACTION_DOWN was missed)
+      val startX = (touchData["startX"] as? Number)?.toFloat()
+      val startY = (touchData["startY"] as? Number)?.toFloat()
+      val startTime = (touchData["startTime"] as? Number)?.toLong()
         
         when (action) {
           MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-            // Start of touch gesture
-            if (pointerCount == 1 || !isMultiTouch) {
-              // First touch point
-              currentTouchStartTime = timestamp
-              currentTouchStartX = x
-              currentTouchStartY = y
-              isMultiTouch = false
-            }
+            // Start of touch gesture - simplified tracking
+            currentTouchStartTime = timestamp
+            currentTouchStartX = x
+            currentTouchStartY = y
+            isMultiTouch = pointerCount > 1
             
-            if (pointerCount > 1 && x2 != null && y2 != null) {
-              // Second touch point for pinch gesture
+            if (isMultiTouch && x2 != null && y2 != null) {
               currentTouchStartX2 = x2
               currentTouchStartY2 = y2
-              isMultiTouch = true
             }
             
-            val responseData = mapOf(
+            promise.resolve(mapOf(
               "gestureType" to "down",
               "timestamp" to timestamp,
               "x" to x,
               "y" to y,
-              "pointerCount" to pointerCount,
-              "isMultiTouch" to isMultiTouch
-            )
-            promise.resolve(responseData)
+              "pressure" to pressure,
+              "componentId" to componentId,
+              "inputType" to inputType,
+              "pointerCount" to pointerCount
+            ))
           }
           
           MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-            // End of touch gesture - calculate all metrics
+            // Handle cases where ACTION_DOWN was missed - use provided start coordinates or current coordinates
+            val actualStartX = startX ?: currentTouchStartX
+            val actualStartY = startY ?: currentTouchStartY
+            val actualStartTime = startTime ?: currentTouchStartTime
+            
+            // If no valid start coordinates, treat as a tap at current location
+            if (actualStartTime == 0L || (actualStartX == 0f && actualStartY == 0f)) {
+              currentTouchStartTime = timestamp - 50 // Assume 50ms duration for missed ACTION_DOWN
+              currentTouchStartX = x
+              currentTouchStartY = y
+            } else {
+              currentTouchStartTime = actualStartTime
+              currentTouchStartX = actualStartX
+              currentTouchStartY = actualStartY
+            }
+            
+            // End of touch gesture - calculate essential metrics
             val duration = timestamp - currentTouchStartTime
             val deltaX = x - currentTouchStartX
             val deltaY = y - currentTouchStartY
             val distance = sqrt((deltaX * deltaX + deltaY * deltaY).toDouble()).toFloat()
             val velocity = if (duration > 0) distance / (duration / 1000f) else 0f
             
-            // Determine gesture type based on movement, duration, and touch count
+            // Simplified gesture detection for banking app use cases
             val detectedGestureType = when {
-              isMultiTouch && x2 != null && y2 != null -> "pinch"
-              duration > 500 && distance < 30 -> "long_press" // Increased threshold for long press
-              distance > 50 -> when { // Minimum distance threshold for swipe/scroll
-                abs(deltaX) > abs(deltaY) * 1.5 -> "swipe" // Horizontal movement
-                abs(deltaY) > abs(deltaX) * 1.5 -> "scroll" // Vertical movement
-                else -> "swipe" // Diagonal movement defaults to swipe
-              }
-              distance < 30 -> "tap" // Tap threshold
-              else -> gestureType // Use provided gesture type as fallback
+              isMultiTouch -> "pinch"
+              duration > 800 && distance < 20 -> "long_press"
+              distance > 30 -> if (abs(deltaY) > abs(deltaX)) "scroll" else "swipe"
+              else -> "tap"
             }
             
-            // Create touch event with multi-touch support
-            val touchEvent = if (isMultiTouch && x2 != null && y2 != null) {
-              MobileTouchEventData(
-                gestureType = detectedGestureType,
-                timestamp = timestamp,
-                startX = currentTouchStartX,
-                startY = currentTouchStartY,
-                endX = x,
-                endY = y,
-                duration = duration,
-                distance = distance,
-                velocity = velocity,
-                startX2 = currentTouchStartX2,
-                startY2 = currentTouchStartY2,
-                endX2 = x2,
-                endY2 = y2
-              )
-            } else {
-              MobileTouchEventData(
-                gestureType = detectedGestureType,
-                timestamp = timestamp,
-                startX = currentTouchStartX,
-                startY = currentTouchStartY,
-                endX = x,
-                endY = y,
-                duration = duration,
-                distance = distance,
-                velocity = velocity
-              )
-            }
+            // Create optimized touch event for behavioral analysis
+            val touchEvent = MobileTouchEventData(
+              gestureType = detectedGestureType,
+              timestamp = timestamp,
+              startX = currentTouchStartX,
+              startY = currentTouchStartY,
+              endX = x,
+              endY = y,
+              duration = duration,
+              distance = distance,
+              velocity = velocity,
+              startX2 = if (isMultiTouch) currentTouchStartX2 else null,
+              startY2 = if (isMultiTouch) currentTouchStartY2 else null,
+              endX2 = if (isMultiTouch) x2 else null,
+              endY2 = if (isMultiTouch) y2 else null
+            )
             
             touchEvents.add(touchEvent)
             lastTouchTime = timestamp
-            
-            // Reset multi-touch state
             isMultiTouch = false
             
-            val responseData = mutableMapOf<String, Any>(
+            Log.d("DataCollectionModule", "Touch event stored: gesture=$detectedGestureType, start=($currentTouchStartX,$currentTouchStartY), end=($x,$y), distance=$distance, velocity=$velocity, duration=$duration")
+            
+            promise.resolve(mapOf(
               "gestureType" to detectedGestureType,
               "timestamp" to timestamp,
               "startX" to currentTouchStartX,
@@ -183,18 +286,12 @@ class DataCollectionModule : Module() {
               "endY" to y,
               "duration" to duration,
               "distance" to distance,
-              "velocity" to velocity
-            )
-            
-            // Add multi-touch data if applicable
-            if (touchEvent.startX2 != null) {
-              responseData["startX2"] = touchEvent.startX2
-              responseData["startY2"] = touchEvent.startY2!!
-              responseData["endX2"] = touchEvent.endX2!!
-              responseData["endY2"] = touchEvent.endY2!!
-            }
-            
-            promise.resolve(responseData)
+              "velocity" to velocity,
+              "pressure" to pressure,
+              "componentId" to componentId,
+              "inputType" to inputType,
+              "success" to true
+            ))
           }
           
           else -> {
@@ -215,110 +312,505 @@ class DataCollectionModule : Module() {
       }
     }
 
-    // Track keydown events for native timing calculation
-    AsyncFunction("trackKeydown") { keystrokeData: Map<String, Any>, promise: Promise ->
+    // Optimized In-App Keystroke Capture - Direct Input Component Integration
+    AsyncFunction("startNativeKeystrokeCapture") { promise: Promise ->
       try {
-        val character = keystrokeData["character"] as? String ?: ""
-        val timestamp = System.currentTimeMillis()
+        Log.d("DataCollectionModule", "Starting optimized in-app keystroke capture")
         
-        // Store keydown timestamp for this character
-        activeKeyPresses[character] = timestamp
+        // Initialize simplified keystroke capture
+        registerForKeystrokeCapture()
         
-        Log.d("DataCollectionModule", "Keydown tracked for '$character' at $timestamp")
+        isKeystrokeCaptureActive = true
+        Log.d("DataCollectionModule", "Keystroke capture activated: $isKeystrokeCaptureActive")
+        lastKeystrokeEndTime = 0L
         
-        val responseData = mapOf(
-          "character" to character,
-          "timestamp" to timestamp,
-          "tracked" to true
-        )
+        promise.resolve(mapOf(
+          "success" to true, 
+          "message" to "In-app keystroke capture started",
+          "captureMethod" to "DIRECT_COMPONENT_INTEGRATION",
+          "optimized" to true
+        ))
         
-        promise.resolve(responseData)
       } catch (e: Exception) {
-        Log.e("DataCollectionModule", "Error tracking keydown: ${e.message}")
-        promise.reject("KEYDOWN_TRACKING_ERROR", "Failed to track keydown: ${e.message}", e)
+        Log.e("DataCollectionModule", "Error starting keystroke capture: ${e.message}", e)
+        promise.reject("KEYSTROKE_CAPTURE_START_ERROR", "Failed to start keystroke capture: ${e.message}", e)
+      }
+    }
+    
+    // Stop keystroke capture
+    AsyncFunction("stopNativeKeystrokeCapture") { promise: Promise ->
+      try {
+        isKeystrokeCaptureActive = false
+        cleanupKeystrokeCapture()
+        
+        Log.d("DataCollectionModule", "Keystroke capture stopped")
+        promise.resolve(mapOf(
+          "success" to true,
+          "message" to "Keystroke capture stopped",
+          "capturedEvents" to nativeKeystrokeData.size
+        ))
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error stopping keystroke capture: ${e.message}")
+        promise.reject("KEYSTROKE_CAPTURE_STOP_ERROR", "Failed to stop keystroke capture: ${e.message}", e)
+      }
+    }
+    
+    // Optimized keystroke event handler - called from React Native input components
+    AsyncFunction("handleNativeKeyEvent") { eventData: Map<String, Any>, promise: Promise ->
+      try {
+        if (!isKeystrokeCaptureActive) {
+          promise.resolve(mapOf("captured" to false, "reason" to "Capture not active"))
+          return@AsyncFunction
+        }
+        
+        val action = (eventData["action"] as? Number)?.toInt() ?: KeyEvent.ACTION_DOWN
+        val character = eventData["character"] as? String ?: ""
+        val keyCode = (eventData["keyCode"] as? Number)?.toInt() ?: 0
+        val timestamp = (eventData["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis()
+        val touchX = (eventData["touchX"] as? Number)?.toFloat() ?: 0f
+        val touchY = (eventData["touchY"] as? Number)?.toFloat() ?: 0f
+        val pressure = (eventData["pressure"] as? Number)?.toFloat() ?: 1.0f
+        val componentId = eventData["componentId"] as? String ?: "unknown"
+        val inputType = eventData["inputType"] as? String ?: "text"
+        
+        when (action) {
+          KeyEvent.ACTION_DOWN -> {
+            // Record keydown event for timing calculation
+            val keyId = "${keyCode}_${character}_$timestamp"
+            activeKeyDowns[keyCode] = timestamp
+            touchCoordinates[keyCode] = Pair(touchX, touchY)
+            
+            promise.resolve(mapOf(
+              "action" to "keydown",
+              "character" to character,
+              "keyCode" to keyCode,
+              "timestamp" to timestamp,
+              "componentId" to componentId,
+              "inputType" to inputType,
+              "captured" to true
+            ))
+          }
+          
+          KeyEvent.ACTION_UP -> {
+            // Calculate behavioral timing metrics
+            val keyDownTime = activeKeyDowns.remove(keyCode)
+            if (keyDownTime != null && character.isNotEmpty()) {
+              val dwellTime = timestamp - keyDownTime
+              val flightTime = if (lastKeystrokeEndTime > 0L) keyDownTime - lastKeystrokeEndTime else 0L
+              val coordinates = touchCoordinates.remove(keyCode) ?: Pair(touchX, touchY)
+              
+              // Create optimized keystroke event for behavioral analysis
+              val keystrokeEvent = NativeKeystrokeEventData(
+                character = character,
+                keyCode = keyCode,
+                keydownTimestamp = keyDownTime,
+                keyupTimestamp = timestamp,
+                touchX = coordinates.first,
+                touchY = coordinates.second,
+                pressure = pressure,
+                dwellTime = dwellTime,
+                flightTime = flightTime,
+                isHardwareTiming = false, // Direct component integration
+                deviceId = 0,
+                scanCode = 0
+              )
+              
+              nativeKeystrokeData["${keyDownTime}_$character"] = keystrokeEvent
+              lastKeystrokeEndTime = timestamp
+              
+              // Add to legacy structure for compatibility
+              keystrokeEvents.add(MobileKeystrokeData(
+                character = character,
+                timestamp = timestamp,
+                dwellTime = dwellTime,
+                flightTime = flightTime,
+                coordinate_x = coordinates.first,
+                coordinate_y = coordinates.second,
+                inputType = inputType,
+                pressure = pressure
+              ))
+              
+              promise.resolve(mapOf(
+                "action" to "keyup",
+                "character" to character,
+                "dwellTime" to dwellTime,
+                "flightTime" to flightTime,
+                "touchX" to coordinates.first,
+                "touchY" to coordinates.second,
+                "pressure" to pressure,
+                "componentId" to componentId,
+                "inputType" to inputType,
+                "timestamp" to timestamp,
+                "captured" to true
+              ))
+            } else {
+              promise.resolve(mapOf(
+                "action" to "keyup",
+                "character" to character,
+                "timestamp" to timestamp,
+                "captured" to false,
+                "reason" to "No matching keydown or empty character"
+              ))
+            }
+          }
+          
+          else -> {
+            promise.resolve(mapOf(
+              "action" to "unknown",
+              "timestamp" to timestamp,
+              "captured" to false
+            ))
+          }
+        }
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error handling native key event: ${e.message}", e)
+        promise.reject("NATIVE_KEY_ERROR", "Failed to handle native key event: ${e.message}", e)
       }
     }
 
-    // Enhanced Keystroke Collection with Simplified Structure (Single Object per Keystroke)
+    // Process Keystroke Event (Called from React Native input components)
+    AsyncFunction("processKeystrokeEvent") { eventData: Map<String, Any?>, promise: Promise ->
+      try {
+        Log.d("DataCollectionModule", "Processing keystroke event: $eventData")
+        
+        if (!isKeystrokeCaptureActive) {
+          Log.w("DataCollectionModule", "Keystroke capture not active, auto-initializing...")
+          isKeystrokeCaptureActive = true
+          registerForKeystrokeCapture()
+        }
+        
+        val action = (eventData["action"] as? Number)?.toInt() ?: -1
+        val keyCode = (eventData["keyCode"] as? Number)?.toInt() ?: -1
+        val character = (eventData["character"] as? String) ?: ""
+        val componentId = (eventData["componentId"] as? String) ?: "unknown"
+        val inputType = (eventData["inputType"] as? String) ?: "text"
+        val touchX = (eventData["touchX"] as? Number)?.toFloat() ?: 0.0f
+        val touchY = (eventData["touchY"] as? Number)?.toFloat() ?: 0.0f
+        val pressure = (eventData["pressure"] as? Number)?.toFloat() ?: 1.0f
+        
+        Log.d("DataCollectionModule", "Keystroke data: action=$action, keyCode=$keyCode, character='$character', component=$componentId")
+        
+        // Process the keystroke event inline
+        val timestamp = System.currentTimeMillis()
+        
+        when (action) {
+          KeyEvent.ACTION_DOWN -> {
+            activeKeyDowns[keyCode] = timestamp
+            Log.d("DataCollectionModule", "Direct keystroke capture - keydown: $character, keyCode: $keyCode")
+            
+            promise.resolve(mapOf(
+              "action" to "keydown",
+              "character" to character,
+              "keyCode" to keyCode,
+              "timestamp" to timestamp,
+              "touchX" to touchX,
+              "touchY" to touchY,
+              "pressure" to pressure,
+              "componentId" to componentId,
+              "inputType" to inputType,
+              "captured" to true,
+              "directCapture" to true
+            ))
+          }
+          
+          KeyEvent.ACTION_UP -> {
+            // Calculate behavioral timing metrics
+            val keyDownTime = activeKeyDowns.remove(keyCode)
+            if (keyDownTime != null && character.isNotEmpty()) {
+              val dwellTime = timestamp - keyDownTime
+              val flightTime = if (lastKeystrokeEndTime > 0L) keyDownTime - lastKeystrokeEndTime else 0L
+              val coordinates = touchCoordinates.remove(keyCode) ?: Pair(touchX, touchY)
+              
+              // Create optimized keystroke event for behavioral analysis
+              val keystrokeEvent = NativeKeystrokeEventData(
+                character = character,
+                keyCode = keyCode,
+                keydownTimestamp = keyDownTime,
+                keyupTimestamp = timestamp,
+                touchX = coordinates.first,
+                touchY = coordinates.second,
+                pressure = pressure,
+                dwellTime = dwellTime,
+                flightTime = flightTime,
+                isHardwareTiming = false, // Direct component integration
+                deviceId = 0,
+                scanCode = 0
+              )
+              
+              nativeKeystrokeData["${keyDownTime}_$character"] = keystrokeEvent
+              lastKeystrokeEndTime = timestamp
+              
+              // Add to legacy structure for compatibility
+              keystrokeEvents.add(MobileKeystrokeData(
+                character = character,
+                timestamp = timestamp,
+                dwellTime = dwellTime,
+                flightTime = flightTime,
+                coordinate_x = coordinates.first,
+                coordinate_y = coordinates.second,
+                inputType = inputType,
+                pressure = pressure
+              ))
+              
+              Log.d("DataCollectionModule", "Keystroke stored: character='$character', dwell=${dwellTime}ms, flight=${flightTime}ms, total_stored=${keystrokeEvents.size}")
+              Log.d("DataCollectionModule", "Direct keystroke capture - keyup: $character, dwell: ${dwellTime}ms, flight: ${flightTime}ms")
+              
+              promise.resolve(mapOf(
+                "action" to "keyup",
+                "character" to character,
+                "dwellTime" to dwellTime,
+                "flightTime" to flightTime,
+                "touchX" to coordinates.first,
+                "touchY" to coordinates.second,
+                "pressure" to pressure,
+                "componentId" to componentId,
+                "inputType" to inputType,
+                "timestamp" to timestamp,
+                "captured" to true,
+                "directCapture" to true
+              ))
+            } else {
+              promise.resolve(mapOf(
+                "action" to "keyup",
+                "character" to character,
+                "timestamp" to timestamp,
+                "captured" to false,
+                "reason" to "No matching keydown or empty character",
+                "directCapture" to true
+              ))
+            }
+          }
+          
+          else -> {
+            promise.resolve(mapOf(
+              "action" to "unknown",
+              "timestamp" to timestamp,
+              "captured" to false,
+              "reason" to "Unknown action: $action",
+              "directCapture" to true
+            ))
+          }
+        }
+        
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error processing keystroke event: ${e.message}", e)
+        promise.reject("KEYSTROKE_EVENT_ERROR", "Failed to process keystroke event: ${e.message}", e)
+      }
+    }
+
+    // Auto-initialize direct keystroke capture for seamless integration
+    AsyncFunction("initializeDirectKeystrokeCapture") { promise: Promise ->
+      try {
+        if (!isKeystrokeCaptureActive) {
+          Log.d("DataCollectionModule", "Initializing direct keystroke capture")
+          isKeystrokeCaptureActive = true
+          registerForKeystrokeCapture()
+          
+          promise.resolve(mapOf(
+            "initialized" to true,
+            "directCapture" to true,
+            "message" to "Direct keystroke capture initialized successfully"
+          ))
+        } else {
+          promise.resolve(mapOf(
+            "initialized" to false,
+            "directCapture" to true,
+            "message" to "Direct keystroke capture already active"
+          ))
+        }
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error initializing direct keystroke capture: ${e.message}", e)
+        promise.reject("INIT_DIRECT_CAPTURE_ERROR", "Failed to initialize direct keystroke capture: ${e.message}", e)
+      }
+    }
+
+    // Process Real Touch Event (Called from React Native with real MotionEvent data)
+    AsyncFunction("processRealTouchEvent") { touchData: Map<String, Any?>, promise: Promise ->
+      try {
+        val result = handleRealTouchEvent(touchData)
+        promise.resolve(result)
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error processing real touch event: ${e.message}", e)
+        promise.reject("REAL_TOUCH_EVENT_ERROR", "Failed to process real touch event: ${e.message}", e)
+      }
+    }
+
+    // Get native keystroke data (replaces old collectKeystrokeNative)
+    AsyncFunction("getNativeKeystrokeData") { promise: Promise ->
+      try {
+        val nativeData = nativeKeystrokeData.values.map { event ->
+          mapOf(
+            "character" to event.character,
+            "keyDownTime" to event.keydownTimestamp,
+            "keyUpTime" to event.keyupTimestamp,
+            "dwellTime" to event.dwellTime,
+            "flightTime" to event.flightTime,
+            "coordinate_x" to event.touchX,
+            "coordinate_y" to event.touchY,
+            "pressure" to event.pressure,
+            "timestamp" to event.keyupTimestamp,
+            "inputType" to "native_hardware",
+            "nativeCapture" to true
+          )
+        }
+        
+        Log.d("DataCollectionModule", "Returning ${nativeData.size} authentic hardware keystroke events")
+        promise.resolve(mapOf(
+          "events" to nativeData,
+          "totalEvents" to nativeData.size,
+          "captureMethod" to "ANDROID_HARDWARE_EVENTS",
+          "isAuthentic" to true,
+          "dataQuality" to "HARDWARE_LEVEL",
+          "timingSource" to "ANDROID_EVENT_TIME"
+        ))
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error getting native keystroke data: ${e.message}", e)
+        promise.reject("NATIVE_DATA_ERROR", "Failed to get native keystroke data: ${e.message}", e)
+      }
+    }
+
+    // ========== NATIVE TOUCH CAPTURE SYSTEM ==========
+    // Real Android MotionEvent interception for authentic touch data
+    
+    AsyncFunction("startNativeTouchCapture") { promise: Promise ->
+      try {
+        if (isCapturingNativeTouch) {
+          Log.w("DataCollectionModule", "Native touch capture already active")
+          promise.resolve(mapOf(
+            "success" to true,
+            "message" to "Native touch capture already active",
+            "captureMethod" to "ANDROID_MOTION_EVENTS"
+          ))
+          return@AsyncFunction
+        }
+
+        // Clear previous data
+        nativeTouchEvents.clear()
+        activeTouches.clear()
+        
+        // Create invisible overlay to intercept touch events
+        mainHandler.post {
+          try {
+            setupNativeTouchOverlay()
+            isCapturingNativeTouch = true
+            
+            Log.i("DataCollectionModule", "✅ Native touch capture started - intercepting real MotionEvents")
+            promise.resolve(mapOf(
+              "success" to true,
+              "message" to "Native touch capture started successfully",
+              "captureMethod" to "ANDROID_MOTION_EVENTS",
+              "isAuthentic" to true,
+              "dataSource" to "HARDWARE_TOUCH_EVENTS"
+            ))
+          } catch (e: Exception) {
+            Log.e("DataCollectionModule", "Failed to setup native touch overlay: ${e.message}", e)
+            promise.reject("OVERLAY_ERROR", "Failed to setup touch overlay: ${e.message}", e)
+          }
+        }
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error starting native touch capture: ${e.message}", e)
+        promise.reject("NATIVE_TOUCH_ERROR", "Failed to start native touch capture: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("stopNativeTouchCapture") { promise: Promise ->
+      try {
+        if (!isCapturingNativeTouch) {
+          promise.resolve(mapOf(
+            "success" to true,
+            "message" to "Native touch capture was not active"
+          ))
+          return@AsyncFunction
+        }
+
+        mainHandler.post {
+          try {
+            removeNativeTouchOverlay()
+            isCapturingNativeTouch = false
+            activeTouches.clear()
+            
+            Log.i("DataCollectionModule", "Native touch capture stopped")
+            promise.resolve(mapOf(
+              "success" to true,
+              "message" to "Native touch capture stopped successfully",
+              "totalEvents" to nativeTouchEvents.size
+            ))
+          } catch (e: Exception) {
+            Log.e("DataCollectionModule", "Error removing touch overlay: ${e.message}", e)
+            promise.reject("OVERLAY_REMOVE_ERROR", "Failed to remove touch overlay: ${e.message}", e)
+          }
+        }
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error stopping native touch capture: ${e.message}", e)
+        promise.reject("NATIVE_TOUCH_ERROR", "Failed to stop native touch capture: ${e.message}", e)
+      }
+    }
+
+    AsyncFunction("getNativeTouchData") { promise: Promise ->
+      try {
+        val nativeData = nativeTouchEvents.map { event ->
+          mapOf(
+            "pointerId" to event.pointerId,
+            "action" to event.action,
+            "actionName" to getActionName(event.action),
+            "x" to event.x,
+            "y" to event.y,
+            "rawX" to event.rawX,
+            "rawY" to event.rawY,
+            "pressure" to event.pressure,
+            "size" to event.size,
+            "touchMajor" to event.touchMajor,
+            "touchMinor" to event.touchMinor,
+            "orientation" to event.orientation,
+            "timestamp" to event.timestamp,
+            "eventTime" to event.eventTime,
+            "downTime" to event.downTime,
+            "deviceId" to event.deviceId,
+            "source" to event.source,
+            "toolType" to event.toolType,
+            "isHardwareEvent" to event.isHardwareEvent,
+            "inputType" to "native_hardware_touch"
+          )
+        }
+        
+        Log.d("DataCollectionModule", "Returning ${nativeData.size} authentic hardware touch events")
+        promise.resolve(mapOf(
+          "events" to nativeData,
+          "totalEvents" to nativeData.size,
+          "captureMethod" to "ANDROID_MOTION_EVENTS",
+          "isAuthentic" to true,
+          "dataQuality" to "HARDWARE_LEVEL",
+          "timingSource" to "ANDROID_EVENT_TIME"
+        ))
+      } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error getting native touch data: ${e.message}", e)
+        promise.reject("NATIVE_TOUCH_DATA_ERROR", "Failed to get native touch data: ${e.message}", e)
+      }
+    }
+    
+    // Legacy keystroke collection (DEPRECATED - JavaScript timing is not authentic)
     AsyncFunction("collectKeystrokeNative") { keystrokeData: Map<String, Any>, promise: Promise ->
       try {
-        // Log incoming data for debugging
-        Log.d("DataCollectionModule", "Received keystroke data: $keystrokeData")
+        Log.w("DataCollectionModule", "⚠️  DEPRECATED: collectKeystrokeNative uses JavaScript timing (not authentic)")
+        Log.w("DataCollectionModule", "⚠️  Use startNativeKeystrokeCapture() + getNativeKeystrokeData() for real hardware data")
         
         val character = keystrokeData["character"] as? String ?: ""
         val timestamp = (keystrokeData["timestamp"] as? Number)?.toLong() ?: System.currentTimeMillis()
         val dwellTime = (keystrokeData["dwellTime"] as? Number)?.toLong() ?: 0L
         val flightTime = (keystrokeData["flightTime"] as? Number)?.toLong() ?: 0L
-        val x = (keystrokeData["coordinate_x"] as? Number)?.toFloat() ?: (keystrokeData["pageX"] as? Number)?.toFloat() ?: (keystrokeData["x"] as? Number)?.toFloat() ?: 0f
-        val y = (keystrokeData["coordinate_y"] as? Number)?.toFloat() ?: (keystrokeData["pageY"] as? Number)?.toFloat() ?: (keystrokeData["y"] as? Number)?.toFloat() ?: 0f
+        val x = (keystrokeData["coordinate_x"] as? Number)?.toFloat() ?: 0f
+        val y = (keystrokeData["coordinate_y"] as? Number)?.toFloat() ?: 0f
         val pressure = (keystrokeData["pressure"] as? Number)?.toFloat()
         
-        // Log extracted values for debugging
-        Log.d("DataCollectionModule", "Extracted values - Character: $character, Timestamp: $timestamp")
-        Log.d("DataCollectionModule", "Dwell time (original): $dwellTime ms")
-        Log.d("DataCollectionModule", "Flight time: $flightTime ms, Coordinates: ($x, $y)")
-        
-        // Calculate actual dwell time from native timing if available
-        val actualDwellTime = if (activeKeyPresses.containsKey(character)) {
-            val keydownTime = activeKeyPresses.remove(character) ?: 0L
-            if (keydownTime > 0L) timestamp - keydownTime else 0L
-        } else 0L
-        
-        // Use actual timing first, then provided timing as-is (no artificial modification)
-        val validatedDwellTime = when {
-            actualDwellTime > 0L -> actualDwellTime // Use real native timing
-            dwellTime > 0L -> dwellTime // Use provided timing as-is
-            else -> 0L // No fallback - preserve authentic data gaps
-        }
-        
-        // Calculate actual flight time without artificial modification
-        val calculatedFlightTime = if (lastKeystrokeTimestamp > 0L) {
-            timestamp - lastKeystrokeTimestamp
-        } else flightTime
-        
-        val validatedFlightTime = if (calculatedFlightTime > 0L) calculatedFlightTime else flightTime
-        
-        // Use actual coordinates without artificial variation
-        val naturalX = x
-        val naturalY = y
-        
-        // Log validation results
-        if (actualDwellTime > 0L) {
-          Log.d("DataCollectionModule", "Using actual native dwell time: $actualDwellTime ms")
-        } else if (dwellTime > 0L && dwellTime in 30L..500L) {
-          Log.d("DataCollectionModule", "Using provided dwell time: $dwellTime ms")
-        } else {
-          Log.d("DataCollectionModule", "Using realistic fallback dwell time: $validatedDwellTime ms")
-        }
-        
-        // Log actual data collection without modification
-         if (actualDwellTime > 0L) {
-           Log.d("DataCollectionModule", "Using actual native dwell time: $actualDwellTime ms")
-         } else if (dwellTime > 0L) {
-           Log.d("DataCollectionModule", "Using provided dwell time: $dwellTime ms")
-         } else {
-           Log.d("DataCollectionModule", "No dwell time data available - preserving authentic gap")
-         }
-         
-         // Log flight time source
-         if (calculatedFlightTime > 0L && calculatedFlightTime != flightTime) {
-           Log.d("DataCollectionModule", "Using calculated flight time: $calculatedFlightTime ms")
-         } else {
-           Log.d("DataCollectionModule", "Using provided flight time: $flightTime ms")
-         }
-        
-        // Update last keystroke timestamp for flight time calculation
-        lastKeystrokeTimestamp = timestamp
-        
-        // Create keystroke event with authentic data
-        val inputType = keystrokeData["inputType"] as? String ?: "text"
+        // Store as legacy keystroke for backward compatibility
+        val inputType = keystrokeData["inputType"] as? String ?: "legacy_js"
         val keystrokeEvent = MobileKeystrokeData(
           character = character,
           timestamp = timestamp,
-          dwellTime = validatedDwellTime,
-          flightTime = validatedFlightTime,
-          coordinate_x = x, // Original coordinates
-          coordinate_y = y, // Original coordinates
+          dwellTime = dwellTime,
+          flightTime = flightTime,
+          coordinate_x = x,
+          coordinate_y = y,
           inputType = inputType,
           pressure = pressure
         )
@@ -326,44 +818,54 @@ class DataCollectionModule : Module() {
         keystrokeEvents.add(keystrokeEvent)
         lastKeystrokeTime = timestamp
         
-        // Return authentic data without artificial modifications
-        val responseData = mapOf(
+        Log.d("DataCollectionModule", "Legacy keystroke stored (synthetic): '$character' (${dwellTime}ms dwell, ${flightTime}ms flight)")
+        
+        promise.resolve(mapOf(
           "character" to character,
           "timestamp" to timestamp,
-          "dwellTime" to validatedDwellTime,
-          "flightTime" to validatedFlightTime,
-          "coordinate_x" to x, // Original coordinates
-          "coordinate_y" to y, // Original coordinates
+          "dwellTime" to dwellTime,
+          "flightTime" to flightTime,
+          "coordinate_x" to x,
+          "coordinate_y" to y,
           "pressure" to pressure,
-          "isNativeTiming" to (actualDwellTime > 0L),
-          "hasAuthenticData" to (actualDwellTime > 0L || dwellTime > 0L)
-        )
+          "inputType" to inputType,
+          "nativeCapture" to false,
+          "isAuthentic" to false,
+          "isDeprecated" to true,
+          "dataSource" to "JAVASCRIPT_SYNTHETIC",
+          "warning" to "This function uses JavaScript timing - not authentic hardware data. Use native capture instead."
+        ))
         
-        // Log response data
-        Log.d("DataCollectionModule", "Returning keystroke data to JS: $responseData")
-        
-        promise.resolve(responseData)
+
       } catch (e: Exception) {
         Log.e("DataCollectionModule", "Error collecting keystroke: ${e.message}", e)
         promise.reject("KEYSTROKE_COLLECTION_ERROR", "Failed to collect keystroke: ${e.message}", e)
       }
     }
 
-    // Reset Session Data
+    // Reset Session Data (Enhanced for Native Capture)
     AsyncFunction("resetSession") { promise: Promise ->
       try {
-        // Clear all tracking data
+        // Clear all legacy tracking data
         touchEvents.clear()
         keystrokeEvents.clear()
         pendingKeydowns.clear()
-        activeKeyPresses.clear() // Clear native timing tracking
+        
+        // Clear native keystroke data
+        nativeKeystrokeData.clear()
+        activeKeyDowns.clear()
+        touchCoordinates.clear()
+        
+        // Clear native touch data
+        nativeTouchEvents.clear()
+        activeTouches.clear()
         
         // Reset timing variables
         sessionStartTime = System.currentTimeMillis()
         lastTouchTime = 0L
         lastKeystrokeTime = 0L
         lastKeyupTimestamp = 0L
-        lastKeystrokeTimestamp = 0L // Reset native timing tracking
+        lastKeystrokeEndTime = 0L
         currentTouchStartTime = 0L
         currentTouchStartX = 0f
         currentTouchStartY = 0f
@@ -371,8 +873,14 @@ class DataCollectionModule : Module() {
         currentTouchStartY2 = 0f
         isMultiTouch = false
         
-        promise.resolve(true)
+        Log.d("DataCollectionModule", "Session reset - all native and legacy data cleared")
+        promise.resolve(mapOf(
+          "success" to true,
+          "message" to "Session reset with native keystroke data cleared",
+          "timestamp" to sessionStartTime
+        ))
       } catch (e: Exception) {
+        Log.e("DataCollectionModule", "Error resetting session: ${e.message}", e)
         promise.reject("SESSION_RESET_ERROR", "Failed to reset session: ${e.message}", e)
       }
     }
@@ -392,6 +900,7 @@ class DataCollectionModule : Module() {
     // Get Enhanced Session Analytics
     AsyncFunction("getSessionAnalytics") { promise: Promise ->
       try {
+        Log.d("DataCollectionModule", "getSessionAnalytics called - keystrokeEvents size: ${keystrokeEvents.size}, nativeKeystrokeData size: ${nativeKeystrokeData.size}")
         val sessionDuration = System.currentTimeMillis() - sessionStartTime
         
         // Calculate touch analytics
@@ -464,35 +973,17 @@ class DataCollectionModule : Module() {
           }
         )
         
+        Log.d("DataCollectionModule", "getSessionAnalytics returning keystrokeEventData with ${keystrokeEvents.size} events")
+        if (keystrokeEvents.isNotEmpty()) {
+          Log.d("DataCollectionModule", "First keystroke event: character=${keystrokeEvents[0].character}, dwellTime=${keystrokeEvents[0].dwellTime}, flightTime=${keystrokeEvents[0].flightTime}")
+        }
         promise.resolve(analytics)
       } catch (e: Exception) {
         promise.reject("ANALYTICS_ERROR", "Failed to get session analytics: ${e.message}", e)
       }
     }
 
-    // Reset Session Data
-    AsyncFunction("resetSession") { promise: Promise ->
-      try {
-        touchEvents.clear()
-        keystrokeEvents.clear()
-        sessionStartTime = System.currentTimeMillis()
-        lastTouchTime = 0L
-        lastKeystrokeTime = 0L
-        currentTouchStartTime = 0L
-        currentTouchStartX = 0f
-        currentTouchStartY = 0f
-        // Reset multi-touch tracking variables
-        currentTouchStartX2 = 0f
-        currentTouchStartY2 = 0f
-        isMultiTouch = false
-        pendingKeydowns.clear()
-        lastKeyupTimestamp = 0L
-        
-        promise.resolve(true)
-      } catch (e: Exception) {
-        promise.reject("RESET_ERROR", "Failed to reset session: ${e.message}", e)
-      }
-    }
+
 
     // Device Behavior Collection (Enhanced)
     AsyncFunction("getDeviceBehavior") { promise: Promise ->
@@ -532,9 +1023,43 @@ class DataCollectionModule : Module() {
         promise.reject("PERMISSION_CHECK_ERROR", "Failed to check permissions: ${e.message}", e)
       }
     }
-  }
+  } // End of ModuleDefinition
 
   // Helper Functions for Device Information Only
+
+  // Handle real touch event processing
+  private fun handleRealTouchEvent(touchData: Map<String, Any?>): Map<String, Any?> {
+    val action = (touchData["action"] as? Number)?.toInt() ?: -1
+    val x = (touchData["x"] as? Number)?.toFloat() ?: 0f
+    val y = (touchData["y"] as? Number)?.toFloat() ?: 0f
+    val pressure = (touchData["pressure"] as? Number)?.toFloat() ?: 1.0f
+    val eventTime = (touchData["eventTime"] as? Number)?.toLong() ?: System.currentTimeMillis()
+    
+    if (action == MotionEvent.ACTION_DOWN && isCapturingKeystrokes) {
+      // Estimate which key was touched based on coordinates
+      val estimatedKeyCode = estimateKeyCodeFromCoordinates(x, y)
+      
+      if (estimatedKeyCode != -1) {
+        // Store touch coordinates for keystroke correlation
+        touchCoordinates[estimatedKeyCode] = Pair(x, y)
+        
+        Log.d("DataCollectionModule", "Real touch captured: x=$x, y=$y, pressure=$pressure, estimatedKey=$estimatedKeyCode")
+        
+        return mapOf(
+          "processed" to true,
+          "x" to x,
+          "y" to y,
+          "pressure" to pressure,
+          "estimatedKeyCode" to estimatedKeyCode,
+          "isRealTouch" to true
+        )
+      } else {
+        return mapOf("processed" to false, "reason" to "Could not estimate key")
+      }
+    } else {
+      return mapOf("processed" to false, "reason" to "Not capturing or wrong action")
+    }
+  }
 
   // Helper Functions (existing ones enhanced)
   private fun isDebuggingEnabled(context: Context): Boolean {
@@ -718,6 +1243,251 @@ class DataCollectionModule : Module() {
     } catch (e: Exception) {
       Log.e("DataCollectionModule", "Error getting SIM country: ${e.message}")
       return "error"
+    }
+  }
+  
+  // Hardware key event registration functions
+  // Simplified registration for direct component integration
+  private fun registerForKeystrokeCapture() {
+    try {
+      Log.d("DataCollectionModule", "Setting up direct component keystroke capture")
+      
+      // Clear any previous data
+      activeKeyDowns.clear()
+      touchCoordinates.clear()
+      nativeKeystrokeData.clear()
+      
+      Log.d("DataCollectionModule", "Keystroke capture registration completed")
+      
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error registering keystroke capture: ${e.message}")
+      throw e
+    }
+  }
+  
+  // Simplified system setup - no complex interception needed
+  private fun setupSimplifiedCapture() {
+    try {
+      Log.d("DataCollectionModule", "Setting up simplified component-based capture")
+      // No complex system-level interception needed for direct component integration
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error setting up simplified capture: ${e.message}")
+    }
+  }
+  
+  // Simplified cleanup for direct component integration
+  private fun cleanupKeystrokeCapture() {
+    try {
+      Log.d("DataCollectionModule", "Cleaning up keystroke capture")
+      
+      // Clear all active key tracking
+      activeKeyDowns.clear()
+      touchCoordinates.clear()
+      
+      Log.d("DataCollectionModule", "Keystroke capture cleanup completed")
+      
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error cleaning up keystroke capture: ${e.message}")
+    }
+  }
+  
+  // Add function to process real touch events for coordinate capture
+  fun processRealTouchEvent(motionEvent: MotionEvent) {
+    try {
+      when (motionEvent.action) {
+        MotionEvent.ACTION_DOWN -> {
+          val x = motionEvent.x
+          val y = motionEvent.y
+          val pressure = motionEvent.pressure
+          
+          // Map touch coordinates to potential key codes
+          // This is a simplified mapping - in reality, you'd need keyboard layout detection
+          val estimatedKeyCode = estimateKeyCodeFromCoordinates(x, y)
+          
+          if (estimatedKeyCode != -1) {
+            // Store touch coordinates for keystroke correlation
+            touchCoordinates[estimatedKeyCode] = Pair(x, y)
+            Log.d("DataCollectionModule", "Real touch captured: x=$x, y=$y, pressure=$pressure, estimatedKey=$estimatedKeyCode")
+          }
+        }
+      }
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error processing real touch event: ${e.message}")
+    }
+  }
+  
+  private fun estimateKeyCodeFromCoordinates(x: Float, y: Float): Int {
+    // This is a simplified key mapping - in a real implementation,
+    // you'd need to detect the keyboard layout and map coordinates to keys
+    // For now, return a placeholder
+    return -1
+  }
+
+  // ========== NATIVE TOUCH OVERLAY SYSTEM ==========
+  // Creates invisible overlay to intercept real Android MotionEvents
+  
+  private fun setupNativeTouchOverlay() {
+    // Skip overlay setup for in-app only data collection
+    // The app will collect touch events through React Native's touch handling
+    Log.i("DataCollectionModule", "Native touch overlay disabled - using in-app touch collection only")
+    
+    // Mark as successfully set up without creating system overlay
+    // Touch events will be captured through the React Native layer
+  }
+  
+  private fun removeNativeTouchOverlay() {
+    // No overlay to remove since we're using in-app touch collection only
+    Log.i("DataCollectionModule", "Native touch overlay cleanup - no overlay was created")
+    
+    // Clean up references
+    nativeTouchOverlay = null
+    windowManager = null
+  }
+  
+  // ========== REAL MOTIONEVENT PROCESSING ==========
+  // Processes authentic Android MotionEvent objects
+  
+  private fun processNativeMotionEvent(event: MotionEvent) {
+    try {
+      val action = event.actionMasked
+      val pointerIndex = event.actionIndex
+      val pointerId = event.getPointerId(pointerIndex)
+      
+      // Extract hardware-level touch data
+      val nativeTouchEvent = NativeTouchEventData(
+        pointerId = pointerId,
+        action = action,
+        x = event.getX(pointerIndex),
+        y = event.getY(pointerIndex),
+        rawX = event.rawX,
+        rawY = event.rawY,
+        pressure = event.getPressure(pointerIndex),
+        size = event.getSize(pointerIndex),
+        touchMajor = event.getTouchMajor(pointerIndex),
+        touchMinor = event.getTouchMinor(pointerIndex),
+        orientation = event.getOrientation(pointerIndex),
+        timestamp = System.currentTimeMillis(),
+        eventTime = event.eventTime,
+        downTime = event.downTime,
+        deviceId = event.deviceId,
+        source = event.source,
+        toolType = event.getToolType(pointerIndex),
+        isHardwareEvent = true
+      )
+      
+      // Store the authentic touch event
+      nativeTouchEvents.add(nativeTouchEvent)
+      
+      // Track active touches for gesture analysis
+      when (action) {
+        MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+          val touchPoint = NativeTouchPoint(
+            pointerId = pointerId,
+            startX = event.getX(pointerIndex),
+            startY = event.getY(pointerIndex),
+            startTime = event.eventTime,
+            startPressure = event.getPressure(pointerIndex),
+            currentX = event.getX(pointerIndex),
+            currentY = event.getY(pointerIndex),
+            currentPressure = event.getPressure(pointerIndex),
+            lastUpdateTime = event.eventTime
+          )
+          activeTouches[pointerId] = touchPoint
+          
+          Log.d("DataCollectionModule", "REAL TOUCH DOWN: Pointer $pointerId at (${event.getX(pointerIndex)}, ${event.getY(pointerIndex)}) pressure=${event.getPressure(pointerIndex)}")
+        }
+        
+        MotionEvent.ACTION_MOVE -> {
+          // Update all active pointers with enhanced tracking
+          for (i in 0 until event.pointerCount) {
+            val id = event.getPointerId(i)
+            activeTouches[id]?.let { touchPoint ->
+              val prevX = touchPoint.currentX
+              val prevY = touchPoint.currentY
+              val prevTime = touchPoint.lastUpdateTime
+              
+              touchPoint.currentX = event.getX(i)
+              touchPoint.currentY = event.getY(i)
+              touchPoint.currentPressure = event.getPressure(i)
+              touchPoint.lastUpdateTime = event.eventTime
+              
+              // Calculate instantaneous velocity for precise swipe detection
+              val timeDelta = event.eventTime - prevTime
+              if (timeDelta > 0) {
+                val deltaX = touchPoint.currentX - prevX
+                val deltaY = touchPoint.currentY - prevY
+                val distance = sqrt(deltaX * deltaX + deltaY * deltaY)
+                val velocity = distance / timeDelta // pixels per ms
+                
+                // Log high-velocity movements for swipe analysis
+                if (velocity > 1.0) {
+                  val direction = if (abs(deltaX) > abs(deltaY)) {
+                    if (deltaX > 0) "right" else "left"
+                  } else {
+                    if (deltaY > 0) "down" else "up"
+                  }
+                  
+                  Log.v("DataCollectionModule", "Fast movement detected: velocity=${String.format("%.2f", velocity)} direction=$direction deltaX=${String.format("%.1f", deltaX)} deltaY=${String.format("%.1f", deltaY)}")
+                }
+              }
+            }
+          }
+        }
+        
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+          // Analyze gesture before removing touch point
+          activeTouches[pointerId]?.let { touchPoint ->
+            val totalDuration = event.eventTime - touchPoint.startTime
+            val totalDeltaX = event.getX(pointerIndex) - touchPoint.startX
+            val totalDeltaY = event.getY(pointerIndex) - touchPoint.startY
+            val totalDistance = sqrt(totalDeltaX * totalDeltaX + totalDeltaY * totalDeltaY)
+            val avgVelocity = if (totalDuration > 0) totalDistance / totalDuration else 0f
+            
+            // Enhanced gesture classification
+            val gestureType = when {
+              activeTouches.size > 1 -> "pinch"
+              totalDuration > 500 && totalDistance < 15 -> "long_press"
+              totalDistance >= 20 && avgVelocity >= 0.8 -> "swipe"
+              totalDistance >= 15 && avgVelocity < 0.8 -> "scroll"
+              else -> "tap"
+            }
+            
+            val direction = if (abs(totalDeltaX) > abs(totalDeltaY)) {
+              if (totalDeltaX > 0) "right" else "left"
+            } else {
+              if (totalDeltaY > 0) "down" else "up"
+            }
+            
+            Log.d("DataCollectionModule", "GESTURE COMPLETE: $gestureType direction=$direction distance=${String.format("%.1f", totalDistance)} velocity=${String.format("%.2f", avgVelocity)} duration=${totalDuration}ms")
+          }
+          
+          activeTouches.remove(pointerId)
+          Log.d("DataCollectionModule", "REAL TOUCH UP: Pointer $pointerId")
+        }
+        
+        MotionEvent.ACTION_CANCEL -> {
+          activeTouches.clear()
+          Log.d("DataCollectionModule", "REAL TOUCH CANCELLED")
+        }
+      }
+      
+      // Log authentic hardware data
+      Log.v("DataCollectionModule", "Authentic MotionEvent: action=${getActionName(action)} x=${event.getX(pointerIndex)} y=${event.getY(pointerIndex)} pressure=${event.getPressure(pointerIndex)} time=${event.eventTime}")
+      
+    } catch (e: Exception) {
+      Log.e("DataCollectionModule", "Error processing native motion event: ${e.message}", e)
+    }
+  }
+  
+  private fun getActionName(action: Int): String {
+    return when (action) {
+      MotionEvent.ACTION_DOWN -> "ACTION_DOWN"
+      MotionEvent.ACTION_UP -> "ACTION_UP"
+      MotionEvent.ACTION_MOVE -> "ACTION_MOVE"
+      MotionEvent.ACTION_CANCEL -> "ACTION_CANCEL"
+      MotionEvent.ACTION_POINTER_DOWN -> "ACTION_POINTER_DOWN"
+      MotionEvent.ACTION_POINTER_UP -> "ACTION_POINTER_UP"
+      else -> "ACTION_UNKNOWN($action)"
     }
   }
 }

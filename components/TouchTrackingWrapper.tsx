@@ -65,12 +65,29 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
       touchData.current.isPinching = true;
     }
 
-    // Detect scrolling - improved logic
-    // Scrolling: multiple moves with consistent direction and speed
-    if (touchData.current.moveCount > 2 && distance > 20) {
-      const velocity = distance / (currentTime - touchData.current.startTime);
-      if (velocity > 0.5) { // pixels per millisecond
-        touchData.current.isScrolling = true;
+    // Enhanced swipe detection with direction analysis
+    const timeDelta = currentTime - touchData.current.startTime;
+    const velocity = timeDelta > 0 ? distance / timeDelta : 0;
+
+    // Detect scrolling vs swipe based on movement pattern
+    if (touchData.current.moveCount > 3 && distance > 15) {
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      // Determine primary direction
+      const isHorizontal = absX > absY;
+      const isVertical = absY > absX;
+
+      // Scrolling: consistent direction with moderate velocity
+      if (velocity > 0.3 && velocity < 2.0) {
+        if ((isVertical && absY > 30) || (isHorizontal && absX > 30)) {
+          touchData.current.isScrolling = true;
+        }
+      }
+
+      // Fast swipe: high velocity in clear direction
+      if (velocity > 1.5 && (absX > 25 || absY > 25)) {
+        touchData.current.isScrolling = false; // Override scroll detection for fast swipes
       }
     }
 
@@ -79,14 +96,20 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
       touchData.current.endPressure = force;
     }
 
-    // Only log significant movements, don't collect data during move
-    const velocity = distance / (currentTime - touchData.current.startTime);
-    if (velocity > 0.5) {
+    // Log significant movements with enhanced gesture analysis
+    if (velocity > 0.4) {
+      const direction = Math.abs(deltaX) > Math.abs(deltaY) ?
+        (deltaX > 0 ? 'right' : 'left') :
+        (deltaY > 0 ? 'down' : 'up');
+
       console.log('🔄 Touch move detected:', {
         velocity: velocity.toFixed(3),
         gestureType: touchData.current.isScrolling ? "scroll" : "swipe",
+        direction,
         coords: `(${pageX}, ${pageY})`,
-        distance: distance.toFixed(2)
+        distance: distance.toFixed(2),
+        deltaX: deltaX.toFixed(1),
+        deltaY: deltaY.toFixed(1)
       });
     }
   };
@@ -122,17 +145,36 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
     });
 
     try {
-      // Determine gesture type based on touch behavior
+      // Enhanced gesture type determination with precise thresholds
       let gestureType: "tap" | "swipe" | "scroll" | "pinch" | "long_press" = "tap";
+
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+      const isHorizontal = absX > absY;
+      const isVertical = absY > absX;
 
       if (touchData.current.isPinching) {
         gestureType = "pinch";
-      } else if (duration > 500) {
+      } else if (duration > 500 && distance < 15) {
+        // Long press: long duration with minimal movement
         gestureType = "long_press";
-      } else if (touchData.current.isScrolling) {
+      } else if (touchData.current.isScrolling && touchData.current.moveCount > 5) {
+        // Scroll: multiple moves with consistent direction
         gestureType = "scroll";
-      } else if (distance > 20) {
-        gestureType = "swipe";
+      } else if (distance > 15) {
+        // Swipe detection with direction validation
+        const minSwipeDistance = 20;
+        const minSwipeVelocity = 0.8; // pixels per ms
+
+        if (distance >= minSwipeDistance && velocity >= minSwipeVelocity) {
+          gestureType = "swipe";
+        } else if (distance >= minSwipeDistance) {
+          // Slower movement but significant distance - still a swipe
+          gestureType = "swipe";
+        } else if (touchData.current.moveCount > 3) {
+          // Multiple small movements - likely scroll
+          gestureType = "scroll";
+        }
       }
 
       // Use average pressure if both start and end are available, otherwise use whichever is available
@@ -176,7 +218,11 @@ export function TouchTrackingWrapper({ children, className, style }: TouchTracki
         startCoords: `(${touchData.current.startX}, ${touchData.current.startY})`,
         endCoords: `(${finalEndX}, ${finalEndY})`,
         distance: distance.toFixed(2),
-        velocity: velocity.toFixed(3)
+        velocity: velocity.toFixed(3),
+        direction: absX > absY ? (deltaX > 0 ? 'right' : 'left') : (deltaY > 0 ? 'down' : 'up'),
+        moveCount: touchData.current.moveCount,
+        deltaX: deltaX.toFixed(1),
+        deltaY: deltaY.toFixed(1)
       });
     } catch (error) {
       console.error('Failed to collect touch event:', error);

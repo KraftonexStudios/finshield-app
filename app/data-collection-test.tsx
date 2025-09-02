@@ -21,7 +21,7 @@ import {
   X
 } from 'lucide-react-native';
 import React, { useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import DataCollectionTextInput from '../components/DataCollectionTextInput';
 import { TouchTrackingWrapper } from '../components/TouchTrackingWrapper';
 import { useDataCollectionStore } from '../stores/useDataCollectionStore';

@@ -41,38 +41,62 @@ export default function LoadingSetupScreen() {
           throw new Error('User not authenticated');
         }
 
-        // Wait for initial loading messages to show
-        await new Promise(resolve => setTimeout(resolve, 6000));
+        // Show loading messages for better UX, but reduce wait time
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
-        // Determine endpoint based on scenario
-        let endpoint;
+        // Navigate immediately to prevent UI blocking
         if (collectionScenario === 'first-time-registration') {
-          endpoint = API_ENDPOINTS.DATA.REGULAR;
-        } else if (collectionScenario === 're-registration') {
-          endpoint = API_ENDPOINTS.DATA.CHECK;
-        } else {
-          throw new Error('Invalid collection scenario');
+          // Store credentials first for immediate access
+          try {
+            const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+            if (tempPin && user?.uid) {
+              await storeUserCredentials(
+                user.uid,
+                tempPin,
+                user.biometricEnabled || false
+              );
+            }
+          } catch (credentialError) {
+            console.error('Failed to store credentials:', credentialError);
+          }
+
+          // Navigate immediately, handle data collection in background
+          router.replace('../(app)/dashboard');
+
+          // Process data collection in background after navigation
+          setTimeout(async () => {
+            try {
+              const { endSessionAndSendData, startDataCollection, setUserId, currentSession, startSession } = useDataCollectionStore.getState();
+
+              if (!currentSession) {
+                await startSession(user.uid);
+                await startDataCollection('first-time-registration');
+              } else {
+                setUserId(user.uid);
+              }
+
+              await endSessionAndSendData(API_ENDPOINTS.DATA.REGULAR);
+              await startDataCollection('login');
+            } catch (bgError) {
+              console.warn('Background data collection failed:', bgError);
+            }
+          }, 100);
+
+          return; // Exit early for first-time registration
         }
 
+        // For re-registration, we need the API response to determine next step
+        const endpoint = API_ENDPOINTS.DATA.CHECK;
         console.log(`Sending data to ${endpoint} for scenario: ${collectionScenario}`);
 
         // Update user ID in the current session before sending data
         const { endSessionAndSendData, startDataCollection, setUserId, currentSession, startSession } = useDataCollectionStore.getState();
 
-        // Debug: Check if we have a current session
-        console.log('🔍 Session state before sending data:', {
-          hasCurrentSession: !!currentSession,
-          sessionId: currentSession?.sessionId,
-          currentUserId: currentSession?.userId,
-          newUserId: user.uid,
-          collectionScenario
-        });
-
         // If no session exists, start one before proceeding
         if (!currentSession) {
           console.log('⚠️ No current session found, starting new session before sending data');
           await startSession(user.uid);
-          await startDataCollection(collectionScenario === 'first-time-registration' ? 'first-time-registration' : 're-registration');
+          await startDataCollection('re-registration');
         } else {
           // Update the existing session with the authenticated user ID
           setUserId(user.uid);
@@ -85,21 +109,41 @@ export default function LoadingSetupScreen() {
           console.log(`Data sent successfully to ${endpoint}`);
           console.log('API Response:', result.data);
 
-          // Handle response based on scenario and API response
-          if (collectionScenario === 'first-time-registration') {
-            // For new users, start new session for app usage and go to dashboard
-            await startDataCollection('login');
-            router.replace('../(app)/dashboard');
-          } else if (collectionScenario === 're-registration') {
-            // Parse API response to determine if security questions are needed
-            if (result.data?.requiresSecurityQuestions === true) {
-              console.log('🔒 Suspicious activity detected, showing security questions');
-              router.replace('./security-questions-verification');
-            } else {
-              console.log('✅ Normal activity detected, proceeding to dashboard');
-              await startDataCollection('login');
-              router.replace('../(app)/dashboard');
+          // Handle re-registration response (first-time registration handled above)
+          // Parse API response to determine if security questions are needed
+          if (result.data?.requiresSecurityQuestions === true) {
+            console.log('🔒 Suspicious activity detected, showing security questions');
+            router.replace('./security-questions-verification');
+          } else {
+            console.log('✅ Normal activity detected, proceeding to dashboard');
+
+            // Store user credentials for re-registration users before going to dashboard
+            try {
+              const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+              if (tempPin && user?.uid) {
+                await storeUserCredentials(
+                  user.uid,
+                  tempPin,
+                  user.biometricEnabled || false
+                );
+                console.log('✅ User credentials stored after successful API verification');
+              }
+            } catch (credentialError) {
+              console.error('Failed to store credentials:', credentialError);
             }
+
+            // Navigate immediately, start data collection in background
+            router.replace('../(app)/dashboard');
+
+            // Start login data collection in background
+            setTimeout(async () => {
+              try {
+                await startDataCollection('login');
+              } catch (bgError) {
+                console.warn('Background login data collection failed:', bgError);
+              }
+            }, 100);
           }
         } else {
           // Handle actual failure case (this shouldn't happen with current bypass logic)
@@ -109,6 +153,22 @@ export default function LoadingSetupScreen() {
           if (collectionScenario === 're-registration') {
             router.replace('./security-questions-verification');
           } else {
+            // Store credentials for first-time users even in fallback
+            try {
+              const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+              if (tempPin && user?.uid) {
+                await storeUserCredentials(
+                  user.uid,
+                  tempPin,
+                  user.biometricEnabled || false
+                );
+                console.log('✅ User credentials stored in fallback scenario');
+              }
+            } catch (credentialError) {
+              console.error('Failed to store credentials in fallback:', credentialError);
+            }
+
             await startDataCollection('login');
             router.replace('../(app)/dashboard');
           }
@@ -123,11 +183,42 @@ export default function LoadingSetupScreen() {
         // Continue with flow despite errors
         const { collectionScenario } = useDataCollectionStore.getState();
         if (collectionScenario === 'first-time-registration') {
+          // Store credentials even in error bypass for first-time users
+          try {
+            const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+            if (tempPin && user?.uid) {
+              await storeUserCredentials(
+                user.uid,
+                tempPin,
+                user.biometricEnabled || false
+              );
+              console.log('✅ User credentials stored in error bypass scenario');
+            }
+          } catch (credentialError) {
+            console.error('Failed to store credentials in error bypass:', credentialError);
+          }
+
           router.replace('../(app)/dashboard');
         } else if (collectionScenario === 're-registration') {
           router.replace('./security-questions-verification');
         } else {
-          // Fallback to dashboard
+          // Fallback to dashboard with credential storage attempt
+          try {
+            const { storeUserCredentials, pin: tempPin } = useUserStore.getState();
+
+            if (tempPin && user?.uid) {
+              await storeUserCredentials(
+                user.uid,
+                tempPin,
+                user.biometricEnabled || false
+              );
+              console.log('✅ User credentials stored in fallback scenario');
+            }
+          } catch (credentialError) {
+            console.error('Failed to store credentials in fallback:', credentialError);
+          }
+
           router.replace('../(app)/dashboard');
         }
 
